@@ -1,0 +1,248 @@
+﻿LandisData	"Biomass Harvest"
+
+Timestep 10
+
+>> Prescriptions were based upon previous LANDIS projects, discussions with members of my committee,
+>> active foresters and the USFS silvics manual to ascertain individual tree characteristics to replicate
+>> real-world associations and harvesting techniques
+
+>> Prescribed fire biomass reductions came from several sources:
+>> Waldrop et al., 2008. Fuel reduction treatments affect stand structure of hardwood forests in Western NC and Southern OH, USA. doi:10.1016/j.foreco.2007.11.010
+>> Schweitzer et al., 2019. White Oak (Quercus alba) response to thinning and prescribed fire in north central Alabama mixed pine-hardwood forests. doi: 10.1093/forsci/fxz031
+>> Elliot & Vote, 2005. Effects of understory prescribed burning on shortleaf pine (Pinus echinata)/mixed hardwood forests. https://doi.org/10.3159/1095- 5674(2005)132[236:EOUPBO]2.0.CO;2
+>> Fire Effects Information System (USFS FEIS)
+>> LANDFIRE
+
+
+ManagementAreas		./Harvest/managementAreas.tif
+>>  1-Private Family
+>>  2-Private Commercial
+>>  3-Public
+
+Stands			./Harvest/standsRast.tif
+
+
+>> LOBLOLLY CLEARCUT PRESCRIPTIONS
+
+Prescription LOB_PLANTATION
+	StandRanking Economic		
+	>>Species	EconomicRank	MinimumAge
+	>>——————————————————————
+	PITA			100			30
+	MinimumAge		30
+	ForestTypeTable << LoblollyPine
+	>> InclusionRule ageRange percentCells species
+	          Required	10-300	highest	PITA
+	          SiteSelection Complete
+	          CohortsRemoved ClearCut
+	          Plant PITA
+
+>> OAK-HICKORY PRESCRIPTIONS
+
+Prescription OH_RESISTANCE
+	StandRanking	Economic
+	>>Species	EconomicRank	MinimumAge
+	>>————————————————————
+	QUAL		100			60
+	QURU		100			60
+MinimumAge		50
+	ForestTypeTable	<< Oak-Hickory
+	>>InclusionRule	ageRange	percentCells	species
+	>>————————————————————
+	Required		50-300	40	QUAL QULA3 QUPH QUNI QURU	<< If any of these species (in the age range) are found on at least 40% of the cells in the stand, it qualifies for cutting
+	Optional		60-300	20	CAAL27 << OG 30 and 20
+	Optional		60-300	20	CAGL8
+SiteSelection	Complete
+CohortsRemoved	SpeciesList
+	>>—————————————————————
+	ACRU	All		<<  Midstory removal of all species as an establishement cut for
+	CAAL27	20-60(25%)	<< the shelterwood
+	CAGL8	20-60(25%)
+	FAGR	All
+	FRAM2	All
+	FRPE	All
+	JUVI	All
+	LIST2	All
+	LITU	All
+	NYBI	All
+	NYSY	All
+	OXAR	All
+	PIEC2	All
+	PIPA2	All
+	PIST	All
+	PITA	All
+	PIVI2	All
+	PRSE2	All
+	QUAL	20-60(25%)
+	QUCO2	20-60(25%)
+	QUFA	20-60(25%)
+	QULA3	20-60(25%)
+	QUNI	20-60(25%)
+	QUPR2	20-60(25%)
+	QUPH	20-60(25%)
+	QURU	20-60(25%)
+	QUST	20-60(25%)
+	QUVE	20-60(25%)
+	TAAS	All
+	TADI2	All
+SingleRepeat	20 		<< Needed for Shelterwood treatments to remove the overstory
+CohortsRemoved	SpeciesList	<< To remove the sheltered trees later on I may need another prescription
+	ACRU	All
+	CAAL27	40-500
+	CAGL8	40-500
+	FAGR	All
+	FRAM2	All
+	FRPE	All
+	JUVI	All
+	LIST2	All
+	LITU	All
+	NYBI	All
+	NYSY	All
+	OXAR	All
+	PIEC2	All
+	PIPA2	All
+	PIST	All
+	PITA	All
+	PIVI2	All
+	PRSE2	All
+	QUAL	40-500
+	QUCO2	40-500
+	QUFA	40-500
+	QULA3	40-500
+	QUNI	40-500
+	QUPR2	40-500
+	QUPH	40-500
+	QURU	40-500
+	QUST	40-500
+	QUVE	40-500
+	TAAS	All
+	TADI2	All
+
+>> OAK PINE PRESCRIPTIONS
+
+Prescription OP_RESISTANCE
+	StandRanking	Economic
+	>>Species	EconomicRank	MinimumAge
+	>>————————————————————
+>>	PIEC2		100			40
+	QUVE		80			50
+	QUPR2		100			50
+	QUST		80			50
+MinimumAge		50
+	ForestTypeTable	<< Oak-Pine
+	>>InclusionRule	ageRange	percentCells	species
+	>>————————————————————
+	Optional		50-300	40	QUCO2 QUFA QUPR2 QUST QUVE	<< If any of these species (in the age range) are found on at least 40% of the cells in the stand, it qualifies for cutting
+	Optional		50-300	20	PIEC2 PIVI2 PIPA2 JUVI
+SiteSelection Complete
+CohortsRemoved	SpeciesList
+	>>————————————————————
+	ACRU	1-10(75%) 20-150(25%)		<< Thin all species to make more room for oaks/pines
+	CAAL27	1-10(40%) 20-150(25%)		<< Attempt to keep the same species composition
+	CAGL8	1-10(40%) 20-150(25%)
+	FAGR	1-10(40%) 20-150(25%)
+	FRAM2	1-10(40%) 20-150(25%)
+	FRPE	1-10(40%) 20-150(25%)
+	JUVI	1-10(20%) 20-150(25%)
+	LIST2	1-10(40%) 20-150(25%)
+	LITU	1-10(50%) 20-150(25%)
+	NYBI	1-10(30%) 20-150(50%)
+	NYSY	1-10(30%) 20-150(50%)
+	OXAR	1-10(40%) 20-150(25%)
+	PIEC2	1-10(25%) 20-150(15%)
+	PIPA2	1-10(25%) 20-150(15%)
+	PIST	1-10(25%) 20-150(15%)		<< Less thinning for oaks/pines to give them an advatage
+	PITA	1-10(25%) 20-150(15%)
+	PIVI2	1-10(5%)  20-150(15%)
+	PRSE2	1-10(40%) 20-150(25%)
+	QUAL	1-10(20%) 20-150(15%)
+	QUCO2	1-10(20%) 20-150(15%)
+	QUFA	1-10(20%) 20-150(15%)
+	QULA3	1-10(20%) 20-150(15%)
+	QUNI	1-10(20%) 20-150(15%)
+	QUPR2	1-10(20%) 20-150(15%)
+	QUPH	1-10(20%) 20-150(15%)
+	QURU	1-10(20%) 20-150(15%)
+	QUST	1-10(20%) 20-150(15%)
+	QUVE	1-10(20%) 20-150(15%)
+	TAAS	1-10(40%) 20-150(50%)
+	TADI2	1-10(40%) 20-150(50%)	
+MultipleRepeat	20
+
+
+>> SOFTWOOD PRESCRIPTIONS
+
+Prescription	SOFT_RESISTANCE
+	StandRanking	Economic
+	>>Species	EconomicRank	MinimumAge
+	>>————————————————————
+	PITA		100			40
+	PIEC2		100			40
+	PIPA2		100			40
+MinimumAge		30
+	ForestTypeTable	<< Softwoods
+	>>InclusionRule	ageRange	percentCells	species
+	>>————————————————————
+	Required	40-300		90		PIEC2
+SiteSelection		Complete
+CohortsRemoved	SpeciesList
+	>>————————————————————
+	ACRU	1-10(75%) 11-300(75%)
+	CAAL27	1-10(40%) 11-300(75%)
+	CAGL8	1-10(40%) 11-300(75%)
+	FAGR	1-10(40%) 11-300(75%)
+	FRAM2	1-10(40%) 11-300(75%)
+	FRPE	1-10(40%) 11-300(75%)
+	JUVI	1-10(40%) 11-300(75%)
+	LIST2	1-10(40%) 11-300(75%)
+	LITU	1-10(50%) 11-300(75%)
+	NYBI	1-10(30%) 11-300(75%)
+	NYSY	1-10(30%) 11-300(75%)
+	OXAR	1-10(40%) 11-300(75%)
+	PIEC2	1-10(25%) 11-300(25%)
+	PIPA2	1-10(25%) 11-300(25%)
+	PIST	1-10(25%) 11-300(25%)
+	PITA	1-10(25%) 11-300(25%)
+	PIVI2	1-10(5%)  11-300(25%)
+	PRSE2	1-10(40%) 11-300(75%)
+	QUAL	1-10(20%) 11-300(75%)
+	QUCO2	1-10(20%) 11-300(75%)
+	QUFA	1-10(20%) 11-300(75%)
+	QULA3	1-10(20%) 11-300(75%)
+	QUNI	1-10(20%) 11-300(75%)
+	QUPR2	1-10(20%) 11-300(75%)
+	QUPH	1-10(20%) 11-300(75%)
+	QURU	1-10(20%) 11-300(75%)
+	QUST	1-10(20%) 11-300(75%)
+	QUVE	1-10(20%) 11-300(75%)
+	TAAS	1-10(40%) 11-300(75%)
+	TADI2	1-10(40%) 11-300(75%)	
+MultipleRepeat	40
+
+>>——————————————————————————
+HarvestImplementations
+>> MgmtArea Descriptions:
+>> 1 = Private Landownership, 2 = Commercial Private, 3 = Public Land
+
+>>ma		presc			target%		start	stop	COMMENTS
+1		OH_RESISTANCE		9.189%		0	100
+1		OP_RESISTANCE		6.534%		0	100
+1		SOFT_RESISTANCE		1.872%		0	100
+1		LOB_PLANTATION		7.037%		0	100
+
+2		OH_RESISTANCE		9.213%		0	100
+2		OP_RESISTANCE		6.551%		0	100
+2		SOFT_RESISTANCE		1.627%		0	100
+2		LOB_PLANTATION		7.029%		0	100
+
+3		OH_RESISTANCE		9.115%		0	100
+3		OP_RESISTANCE		6.433%		0	100
+3		SOFT_RESISTANCE		1.641%		0	100
+3		LOB_PLANTATION		7.195%		0	100
+
+>> OUTPUTS
+
+PrescriptionMaps	Harvest/biomass-harvest-prescripts-{timestep}.img
+BiomassMaps		Harvest/biomass-removed-{timestep}.img
+EventLog		Harvest/biomass-event-log.csv
+SummaryLog		Harvest/biomass-harvest-summary-log.csv
