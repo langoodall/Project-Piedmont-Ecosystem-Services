@@ -1,0 +1,226 @@
+---
+title: "Untitled"
+output: pdf_document
+date: "2024-02-02"
+---
+
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(terra)
+library(sf)
+library(SPEI)
+library(lubridate)
+library(lme4)
+library(latex2exp)
+library(ncdf4)
+options(scipen = 999)
+```
+
+
+
+```{r}
+# Change shapefile to fit the raster
+WGS.Shp <- clippedPiedmont.shp %>% st_transform(., crs = "EPSG:4326")
+
+# Get historical average temperatures for AOI from the historical climate data.
+# Some values are too low and result in a PPT:PET ratio that is really large and 
+# it's primarily because the mean temp is too low. These values will be used to replace 
+# these low values
+
+# Get historical monthly mean temperature values
+historicalMinTemp <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Future Climate Tables/Clipped/MinTempDrought.csv")
+historicalMaxTemp <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Future Climate Tables/Clipped/MaxTempDrought.csv")
+historicalMeanTemp <- inner_join(historicalMinTemp, historicalMaxTemp, by = "TIMESTEP") %>%
+  `colnames<-`(c("Timestep", "MinTemp", "MaxTemp")) %>%
+  mutate(MeanTemp = (MinTemp + MaxTemp) / 2) %>%
+  mutate(Month = format(Timestep, "%m")) %>%
+  group_by(Month) %>%
+  summarise(Temp = mean(MeanTemp))
+
+
+# Read in precip data and name it after the GCM and the Year
+file_path <- file.path("C:/Users/lagoodal/Desktop/Dissertation Stuff/Drought Analysis/pr")
+pr_files <- list.files(path = file_path, pattern = "\\.nc$", full.names = TRUE)
+pr_list <- list()
+for (file in pr_files){
+  name_part1 <- substr(strsplit(file, "_")[[1]][3], 1, nchar(strsplit(file, "_")[[1]][3]))
+  name_part2 <- substr(strsplit(file, "_")[[1]][6], 1, nchar(strsplit(file, "_")[[1]][6]))
+  raster_name <- paste(name_part1, name_part2, sep = "_")
+  raster <- rast(file)
+  cropped_raster <- crop(raster, WGS.Shp)
+  masked_raster <- mask(cropped_raster, WGS.Shp)
+  pr_list[[raster_name]] <- masked_raster
+}
+
+# Temp Min
+file_path <- file.path("C:/Users/lagoodal/Desktop/Dissertation Stuff/Drought Analysis/tasmin")
+minTemp_files <- list.files(path = file_path, pattern = "\\.nc$", full.names = TRUE)
+minTemp_list <- list()
+for (file in minTemp_files){
+  name_part1 <- substr(strsplit(file, "_")[[1]][3], 1, nchar(strsplit(file, "_")[[1]][3]))
+  name_part2 <- substr(strsplit(file, "_")[[1]][6], 1, nchar(strsplit(file, "_")[[1]][6]))
+  raster_name <- paste(name_part1, name_part2, sep = "_")
+  raster <- rast(file)
+  cropped_raster <- crop(raster, WGS.Shp)
+  masked_raster <- mask(cropped_raster, WGS.Shp)
+  minTemp_list[[raster_name]] <- masked_raster
+}
+minTemp_list <- lapply(minTemp_list, function(x){x - 273.15}) # Change from K to C
+
+# Temp Max
+file_path <- file.path("C:/Users/lagoodal/Desktop/Dissertation Stuff/Drought Analysis/tasmax")
+maxTemp_files <- list.files(path = file_path, pattern = "\\.nc$", full.names = TRUE)
+maxTemp_list <- list()
+for (file in maxTemp_files){
+  name_part1 <- substr(strsplit(file, "_")[[1]][3], 1, nchar(strsplit(file, "_")[[1]][3]))
+  name_part2 <- substr(strsplit(file, "_")[[1]][6], 1, nchar(strsplit(file, "_")[[1]][6]))
+  raster_name <- paste(name_part1, name_part2, sep = "_")
+  raster <- rast(file)
+  cropped_raster <- crop(raster, WGS.Shp)
+  masked_raster <- mask(cropped_raster, WGS.Shp)
+  maxTemp_list[[raster_name]] <- masked_raster
+}
+maxTemp_list <- lapply(maxTemp_list, function(x){x - 273.15})
+
+# Get the means for each of the raster lists at each time stamp
+meanPr <- lapply(pr_list, function(x){
+  global(x, "mean", na.rm = TRUE)
+})
+meanPr <- as.data.frame(unlist(meanPr)) %>%
+  cbind(rep(seq(as.Date("2006-01-15"), as.Date("2099-12-15"), "month"),20)) %>%
+  rownames_to_column()
+names(meanPr) <- c("Model", "Mean_Total_Precip", "Date")
+meanPr$Model <- sub("_.*$", "", meanPr$Model)
+
+minMeanTemp <- lapply(minTemp_list, function(x){
+  global(x, "mean", na.rm = TRUE)
+})
+minMeanTemp <- as.data.frame(unlist(minMeanTemp)) %>%
+  cbind(rep(seq(as.Date("2006-01-15"), as.Date("2099-12-15"), "month"),20)) %>%
+  rownames_to_column()
+names(minMeanTemp) <- c("Model", "Mean_Min_Temp", "Date")
+minMeanTemp$Model <- sub("_.*$", "", minMeanTemp$Model)
+
+maxMeanTemp <- lapply(maxTemp_list, function(x){
+  global(x, "mean", na.rm = TRUE)
+})
+maxMeanTemp <- as.data.frame(unlist(maxMeanTemp)) %>%
+  cbind(rep(seq(as.Date("2006-01-15"), as.Date("2099-12-15"), "month"),20)) %>%
+  rownames_to_column()
+names(maxMeanTemp) <- c("Model", "Mean_Max_Temp", "Date")
+maxMeanTemp$Model <- sub("_.*$", "", maxMeanTemp$Model)
+
+
+# calculate PET and plot
+climateDf <- minMeanTemp %>%
+  inner_join(maxMeanTemp, by = c("Model", "Date")) %>%
+  inner_join(meanPr, by = c("Model", "Date")) %>%
+  mutate(meanTemp = (Mean_Min_Temp + Mean_Max_Temp) / 2)
+climateDf$meanTemp <- ifelse(climateDf$meanTemp < 0.1, 0.1, climateDf$meanTemp)
+climateDf <- climateDf %>% mutate(Month = format(Date, "%m"))
+climateDf <- climateDf %>%
+  mutate(meanTemp = ifelse(climateDf$meanTemp < historicalMeanTemp$Temp, historicalMeanTemp$Temp, climateDf$meanTemp))
+climateDf$thornPET <- thornthwaite(climateDf$meanTemp, lat = 35.77)
+
+ggplot(climateDf, aes(x = Date, y = thornPET, col = Model)) +
+  geom_line(alpha = 1) +
+  theme_classic() +
+  ylab("PET mm/month") +
+  ggtitle("Thornthwaite PET")
+
+ggplot(climateDf, aes(x = Date, y = Mean_Total_Precip, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("PPT (mm/month)") +
+  ggtitle("Precipitation")
+
+# Now calculate the ratio
+climateDf <- climateDf %>%
+  mutate(thornRatio = Mean_Total_Precip / thornPET)
+ggplot(climateDf, aes(x = Date, y = thornRatio, col = Model)) +
+  geom_line() +
+  theme_classic()
+
+
+# Now calculate the proportion of PET / PPT
+climateDf <- climateDf %>%
+  mutate(thornRatio = Mean_Total_Precip / thornPET)
+ggplot(climateDf, aes(x = Date, y = thornRatio, col = Model)) +
+  geom_line(alpha = 0) +
+  theme_classic() +
+  geom_smooth() +
+  ylim(0,2.5) +
+  ylab("Ratio of PPT/PET") +
+  ggtitle("Thornthwaite")
+
+# Now to extract the mean slope across all models and then convert that into the intercept
+# lmer.Thorn <- lmer(thornRatio ~ 1 + Date + (Date|Model), data = climateDf, REML = TRUE)
+# summary(lmer.Thorn)
+# ranef(lmer.Thorn)
+
+# Get variance and slope values
+climateCoef <- list()
+for (i in unique(climateDf$Model)){
+  model <- lm(thornRatio ~ Date, data = climateDf %>% filter(Model == i, thornRatio < 2000))
+  climateCoef[i] <- model$coefficients[2]
+}
+medianIntercept <- median(unlist(climateCoef))
+climateCoef <- as.data.frame(climateCoef)
+climateCoef <- gather(climateCoef, key = Model, value = "bcc.csm1.1.m:NorESM1.M")
+names(climateCoef) <- c("Model", "Slope")
+climateCoef$Model <- gsub("\\.", "-", climateCoef$Model)
+varianceDf <- climateDf %>%
+  group_by(Model) %>%
+  summarise(median = median(thornRatio),
+            variance = var(thornRatio))
+
+# Plot the variance and the slope of the models to determine the models
+# that we want to use
+ggplot(varianceDf, aes(x = reorder(Model, variance), y = variance)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic() +
+  xlab("Model") +
+  ylab(TeX("$\\sigma^2$"))
+ggplot(climateCoef, aes(x = reorder(Model, -Slope), y = Slope)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic()
+
+# High Slope + High Variance = BNU-ESM
+# High Slope + Low Variance = MIROC-ESM-CHEM
+# Low Slope + High Variance = MRI-CGCM3
+# Low Slope + Medium Variance = CCSM4
+
+# 1 year timestep
+plotDf <- climateDf %>%
+  filter(Model %in% c("MRI-CGCM3", "MIROC-ESM-CHEM", "BNU-ESM", "CCSM4"))
+ggplot(plotDf, aes(x = Date, y = thornRatio, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  facet_wrap(~Model) +
+  ylim(0,100)
+
+# The relationships are harder to decipher when using an annual timestep,
+# so a two year timestep is used to display the results
+twoYearPPTPET <- climateDf %>%
+  mutate(biennialGroup = 1 + ((year(Date) - 2006) %/% 2)) %>%
+  group_by(Model, biennialGroup) %>%
+  summarise(median = median(thornRatio),
+            variance = var(thornRatio))
+plotDf2 <- twoYearPPTPET %>%
+  filter(Model %in% c("MRI-CGCM3", "MIROC-ESM-CHEM", "BNU-ESM", "CCSM4"))
+ggplot(plotDf2, aes(x = biennialGroup, y = median, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  facet_wrap(~Model) +
+  geom_smooth(method = "lm")
+
+```
+
+
+
+
+
+
