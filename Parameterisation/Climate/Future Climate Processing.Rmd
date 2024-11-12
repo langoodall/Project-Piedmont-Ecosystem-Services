@@ -1,0 +1,230 @@
+# download and process climate data
+# use geoknife, guide found here: https://cran.r-project.org/web/packages/geoknife/vignettes/geoknife.html
+
+```{r}
+library("exactextractr")
+#library("geoknife")
+library("sf")
+#library("sp")
+library("tidyverse")
+library('terra')
+library('data.table')
+library('ggplot2')
+```
+
+############################################################################################################################################
+##################################### NETCDF PROCESSING FOR LANDIS CLIMATE INPUT FILE ######################################################
+############################################################################################################################################
+
+
+```{r}
+# Import ecoregions shapefile/gpkg and reproject to match netcdf CRS (import one nc for this)
+nc_crs <- terra::rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Daily Climate/agg_macav2metdata_pr_MIROC-ESM-CHEM_r1i1p1_rcp45_2006_2099_CONUS_daily.nc")
+crs(nc_crs) # WGS 84 (CRS84) (OGC:CRS84)
+boundary <- st_read("C:/Users/lagoodal/Desktop/nc_eco_l3/Piedmont UTM 17N.shp") %>%
+  sf::st_transform(crs(nc_crs))
+
+ecoregions <- rast("C:/Users/lagoodal/Desktop/All Raster Layers/ecoregions.tif")
+
+plot(ecoregions)
+
+eco1 <- ecoregions
+eco1[eco1[] != 1] <- NA
+eco1.shp <- as.polygons(eco1)
+eco1.shp <- st_as_sf(eco1.shp)
+
+eco2 <- ecoregions
+eco2[eco2[] != 2] <- NA
+eco2.shp <- as.polygons(eco2)
+eco2.shp <- st_as_sf(eco2.shp)
+
+eco3 <- ecoregions
+eco3[eco3[] != 3] <- NA
+eco3.shp <- as.polygons(eco3)
+eco3.shp <- st_as_sf(eco3.shp)
+
+
+plot(eco1)
+plot(eco2, add = TRUE, col = "blue")
+plot(eco3, add = TRUE, col = "red")
+
+
+ecoregions.shp <- rbind(eco1.shp, eco2.shp, eco3.shp)
+
+
+ecoregions.shp <- ecoregions.shp %>% st_transform(crs = crs(nc_crs))
+
+rm(nc_crs)
+
+```
+
+
+```{r}
+# Import netcdf (geographically and temporally subset via netCDF subset)
+# http://thredds.northwestknowledge.net:8080/thredds/reacch_climate_CMIP5_aggregated_macav2_catalog.html 
+# 2020-01-01 to 2099-12-31
+
+nc_vars <- c("pr", "tasmax", "tasmin", "uas", "vas")
+ncs <- paste0("C:/Users/lagoodal/Desktop/Dissertation Stuff/Daily Climate/agg_macav2metdata_",nc_vars,"_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_daily.nc")
+ncs
+```
+
+```{r}
+# Check pr annual sums 
+##########################################################
+pr <- paste0("./climate/bcc-csm-rcp85/agg_macav2metdata_pr_bcc-csm1-1_r1i1p1_rcp85_2006_2099_CONUS_daily.nc")
+pr <- terra::rast(pr) # all layers (~29,220 days)
+lyrs <- pr
+lyrs <- lyrs[[1:7305]] # Subset multiple layers (just 3 days for testing)
+lyrs <- lyrs[[1:14610]]
+
+plot(lyrs[[210]])
+plot(boundary$geom, add=T)
+
+
+dates <- time(lyrs) # Create a vector of dates for "timestep" variable
+
+mean <- exact_extract(lyrs[[210:213]], boundary, fun='mean') # Exract mean by ecoregion, transform it to a data table, and transpose the rows/columns
+setDT(mean)
+mean <- transpose(mean) # column names match order of ecoregion 
+
+sd <-  exact_extract(lyrs[[210:213]], boundary, fun='stdev')
+setDT(sd)
+sd <- transpose(sd)
+
+cnt <- exact_extract(lyrs[[1:2]], boundary, fun='count')
+sum <-  exact_extract(lyrs[[1:2]], boundary, fun='sum')
+
+
+#colnames(mean) <- paste0(colnames(mean), "mean")
+mean$date <- dates
+mean$yr <- substr(dates, 1, 4)
+sum <- mean[, lapply(.SD, sum), by=yr, .SDcols=c("V1", "V2", "V3", "V4")]
+sum_long <- melt(sum, id.vars="yr")
+
+sum_long %>%
+  ggplot( aes(x=yr, y=value, group=variable, color=variable)) +
+  geom_line(size=2)
+```
+
+##########################################################
+
+```{r}
+#initialize empty list
+# resulting list variable order will follow order of "nc_vars" 
+job_results <- list()
+
+for(i in 1:length(ncs)){ #about 2 minutes to run this loop 
+  lyrs <- terra::rast(ncs[i]) # all layers (~34333, days)
+  #lyrs <- lyrs[[1:3]] # Subset multiple layers (just 3 days for testing)
+  dates <- time(lyrs) # Create a vector of dates for "timestep" variable
+  
+  mean <- exact_extract(lyrs, ecoregions.shp, fun='mean') # Exract mean by ecoregion, transform it to a data table, and transpose the rows/columns
+  setDT(mean)
+  mean <- transpose(mean) # column names match order of ecoregion 
+  colnames(mean) <- paste0(colnames(mean), "mean")
+  
+  sd <- exact_extract(lyrs, ecoregions.shp, fun='stdev') #Repeat for sd 
+  setDT(sd)
+  sd <- transpose(sd) 
+  colnames(sd) <- paste0(colnames(sd), "sd")
+  
+  var <- exact_extract(lyrs, ecoregions.shp, fun='variance') #Repeat for var
+  setDT(var)
+  var <- transpose(var) 
+  colnames(var) <- paste0(colnames(var), "var")
+  
+  comb <- cbind(mean, sd, var)
+  comb$date <- dates 
+  
+  job_results[[i]] <- comb
+  print(i)
+}
+
+
+job_results_reform <- job_results %>%
+  map(., function(x) dplyr::mutate(x, TIMESTEP = paste0(as.character(date), "T00:00:00Z")))
+
+  
+# ADJUST COLUMN NUMBERS BASED ON NUMBER OF ECOREGIONS - LISTS 2 & 3 are the temperature lists
+job_results_reform[[2]][,1:3] <- job_results_reform[[2]][,1:3] - 273.15 #convert from kelvin to celsius (second list is tasmax) #CHECK HOW MANY ECOREGIONS
+job_results_reform[[3]][,1:3] <- job_results_reform[[3]][,1:3] - 273.15 #convert from kelvin to celsius (third list is tasmin)
+
+```
+
+
+```{r}
+#################################################################
+##### COMBINE CLIMATE VARIABLES AND FORMAT FOR EXCEL OUTPUT #####
+#################################################################
+
+# List (in order) names of headers from resulting data tables
+# and variable and units names (in order) 
+
+vnames <- c("V1", "V2", "V3") #change based on number of ecoregions 
+var_rows <- c("#ppt",
+              "#Tmax",
+              "#Tmin",
+              "#easting",
+              "#northing")
+units_means <- c("mm/d",
+                 "C",
+                 "C",
+                 "m/s",
+                 "m/s")
+units_variance <- c("mm/d^2",
+                    "C^2",
+                    "C^2", 
+                    "m/s^2",
+                    "m/s^2")
+
+ecoregions_names <- c("ecoregion1", "ecoregion2", "ecoregion3") #ecoregions names from geoknife, you can change these - reflect that in the ecoregion .txt file 
+#ecoregions_names_new <- boundary$region #ecoregion names in LANDIS
+statistic <- c('mean', 'sd', 'var')
+```
+
+########################################
+
+```{r}
+# Initialize empty lists, which will be appended in the for loop 
+clim <- vector("list", length = length(job_results_reform))
+headers <- vector("list", length = length(job_results_reform))
+# 
+# 
+# 
+clim_with_headers <- vector("list", length = length(job_results_reform))
+# 
+# xxx <- c(var_rows[i], rep("", length(ecoregions_names)*3))
+
+# CORRECT (orders by statistic: i.e., MEAN, MEAN, MEAN, SD, SD, SD,...)
+for(i in 1:length(job_results_reform)){
+  
+  clim[[i]] <- job_results_reform[[i]] %>%
+    dplyr::select(TIMESTEP, contains(statistic)) %>%
+    mutate(across(everything(), ~ replace(.x, .x == "NaN", "0")))
+  
+  headers[[i]] <- rbind(c(var_rows[i], rep("", length(ecoregions_names)*3)), 
+                       c("", rep(ecoregions_names, times = 3)), #ecoregions_names_new
+                       c("TIMESTEP", rep(c(paste0("MEAN(", units_means[i], ")"),
+                                           paste0("STD_DEV(", units_means[i], ")"),
+                                           paste0("VARIANCE(", units_variance[i], ")")), each = 3))) #should be no. ecoregions
+  
+  clim_with_headers[[i]] <- rbind(headers[[i]],clim[[i]], use.names=F)
+}
+
+
+clim_collapsed <- bind_rows(clim_with_headers)
+
+```
+
+
+```{r}
+write_csv(clim_collapsed, "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Future Climate Tables/CCSM4_RCP85.csv")
+
+```
+
+
+
+
+
+
