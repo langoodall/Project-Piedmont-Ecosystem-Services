@@ -1,0 +1,191 @@
+---
+title: "Management Areas & Stands"
+output: pdf_document
+date: "2023-10-19"
+---
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(tidyterra)
+library(terra)
+library(sf)
+# library(rgdal)
+library(RColorBrewer)
+library(spatstat)
+library(gstat)
+```
+
+# Management Areas
+
+```{r}
+set.seed(33)
+# Read in template raster, clippedPiedmont.shp and forest ownership raster, crop and reproject
+templateRaster <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Clipped Piedmont/ecoregions.tif")
+clippedPiedmont.shp <- st_read("C:/Users/lagoodal/Desktop/All Raster Layers/standsraster/Clipped Shapefile/clippedHUC.shp")
+forestOwnership <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Management Areas/Data/forest_own1/forest_own1.tif")
+clippedPiedmont.shp <- st_transform(clippedPiedmont.shp, crs = crs(forestOwnership))
+forestOwnership <- crop(forestOwnership, clippedPiedmont.shp) %>% mask(., clippedPiedmont.shp)
+piedmontOwnership <- terra::project(forestOwnership, templateRaster, method = "near")
+
+# Create a lookup to table reclassify the raster and then reclassify it
+replacements <- rbind(c(3,2), c(4,1), c(5,3), c(6,3), c(7,3))
+piedmontOwnership <- terra::classify(piedmontOwnership, replacements)
+
+# New Ownership values
+# 1 = Private Family
+# 2 = Private Corporate
+# 3 = Public
+
+# Use focal to fill in the gaps
+piedmontOwnership <- focal(piedmontOwnership, w=9, fun = modal, na.policy = "only", na.rm = TRUE)
+test <- focal(piedmontOwnership, w=25, fun = modal, na.policy = "only", na.rm = TRUE)
+
+clippedPiedmont.shp <- st_read("C:/Users/lagoodal/Desktop/All Raster Layers/standsraster/Clipped Shapefile/clippedHUC.shp")
+test <- mask(test, clippedPiedmont.shp)
+
+# Get mapCode dataframe 
+mapCodeDf <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/finalMapCodeDf.csv")
+
+# Find which map codes meet our criteria
+PITA_IDs <- mapCodeDf %>%
+  # select(-CohortAge) %>%
+  group_by(MapCode, SpeciesName) %>%
+  mutate(total = sum(CohortBiomass),
+         percent = (CohortBiomass / total) * 100) %>%
+  filter(SpeciesName == "PITA" & percent >= 90 & CohortAge > 20)
+
+# Filter the mapcodes in the IC map that correspond to the criteria
+ICMap <- rast("C:/Users/lagoodal/Desktop/finalTreeMap.tif")
+x <- ICMap %>%
+  as.data.frame() %>%
+  filter(tl_id %in% PITA_IDs$MapCode)
+maskRastPITA <- ifel(ICMap %in% x$tl_id, 4, 0)
+
+# Mask out the Management Areas map
+maskedMA <- mask(test, maskRastPITA, maskvalues = 4)
+allMARast <- ifel(is.na(maskedMA), 4, maskedMA)
+allMARast <- mask(allMARast, clippedPiedmont.shp)
+
+writeRaster(allMARast,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Harvest/managementAreas2.tif",
+            datatype = "INT1U",
+            NAflag = 0,
+            overwrite = TRUE)
+```
+
+# Stands Map
+
+```{r}
+# Read in the HUC12 watershed data to serve as initial stand boundaries
+Random <- brewer.pal(13, "Set3")
+clippedPiedmont.shp <- st_read("C:/Users/lagoodal/Desktop/All Raster Layers/standsraster/Clipped Shapefile/clippedHUC.shp")
+HUC12 <- st_read("C:/Users/lagoodal/Desktop/All Raster Layers/HUC 8 Watersheds/Shape/WBDHU12.shp") %>%
+  st_transform(crs = crs(test))
+huc12Rast <- rasterize(HUC12, test, field = "ObjectID")
+huc12Rast <- crop(huc12Rast, clippedPiedmont.shp) %>% mask(., clippedPiedmont.shp)
+
+# Create a dataframe that merges the HUC12 stands and the Management Areas
+huc12Df <- as.data.frame(huc12Rast, xy = TRUE)
+ownershipDf <- as.data.frame(test, xy = TRUE)
+huc12Stands <- inner_join(huc12Df, ownershipDf, by = c("x", "y"))
+huc12Stands <- huc12Stands %>% mutate(Stand = paste0(forest_own1, ObjectID))
+
+# Create a Spatraster from the dataframe and then reporject to the appropriate dimensions
+piedmontStands <- as_spatraster(huc12Stands[,c(1,2,5)], xycols = c(1,2), crs = crs(test))
+piedmontStands <- terra::project(piedmontStands, test, method = "near")
+
+# Need to re-focal so that some pesky NAs in the middle of the map are filled in
+piedmontStands <- focal(piedmontStands, w=9, fun = modal, na.policy = "only", na.rm = TRUE)
+piedmontStands <- piedmontStands %>% crop(., clippedPiedmont.shp) %>% mask(., clippedPiedmont.shp)
+
+# # There is still a problem with some unfilled NAs. I will asign all NAs the values of 34 (the closest)
+# # current stand number and then mask out the areas that I do not want
+# piedmontStands <- ifel(is.na(piedmontStands), 34, piedmontStands)
+# piedmontStands <- mask(piedmontStands, clippedPiedmont.shp)
+
+# writeRaster(piedmontStands,
+#             filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/largePiedmontStands.tif",
+#             datatype = "INT4U",
+#             overwrite = TRUE,
+#             NAflag = NA)
+
+# Polygonize the larger stands raster
+standPolygon <- as.polygons(piedmontStands) %>% st_as_sf(.)
+
+# Use st_intersection to cookie cutter the stands polygon that we made from NC rivers and roads in QGIS
+unionStands <- st_read("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Storage/Stands Polygon/standsPolygon.shp") %>%
+  st_intersection(., clippedPiedmont.shp) %>%
+  st_intersection(., standPolygon)
+
+# Convert stand numbers to their row ID and then rasterize
+unionStands <- unionStands  %>% mutate(Stand = row_number())
+smallStandsRast <- rasterize(unionStands, test, field = "Stand", touchers = TRUE)
+
+# Create a lookup table to reclassify the stands to be sequential
+lookupTable <- values(smallStandsRast) %>%
+  as.data.frame() %>%
+  drop_na() %>%
+  unique() %>%
+  arrange(Stand) %>%
+  mutate(ID = row_number()) %>%
+  `colnames<-`(c("ID", "Stand"))
+smallStandsRast <- terra::classify(smallStandsRast, lookupTable)
+smallStandsRast <- focal(smallStandsRast, w=9, fun = modal, na.policy = "only", na.rm = TRUE)
+
+# Create mask with only MA 4 LOB plantations on them
+maskMA <- ifel(allMARast == 4, 1, NA)
+smallStandsRast <- mask(smallStandsRast, maskMA, inverse = TRUE)
+
+# Get the cells that are NAS and then populate them with values
+naCells <- which(is.na(values(smallStandsRast)))
+replacementValues <- seq(3000, by = 1, length.out = length(naCells))
+fakeStandsRast <- smallStandsRast
+values(fakeStandsRast)[naCells] <- replacementValues
+fakeStandsRast <- mask(fakeStandsRast, clippedPiedmont.shp)
+
+# Make thje values sequential again
+lookupTable <- values(fakeStandsRast) %>%
+  as.data.frame() %>%
+  drop_na() %>%
+  unique() %>%
+  arrange(Stand) %>%
+  mutate(ID = row_number()) %>%
+  `colnames<-`(c("ID", "Stand"))
+fakeStandsRast <- terra::classify(fakeStandsRast, lookupTable)
+
+
+writeRaster(fakeStandsRast,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Harvest/standsRast2.tif",
+            datatype = "INT4S",
+            overwrite = TRUE,
+            NAflag = 0)
+
+# I need to edit some of the stands because they are straddling two different MAs
+# Stand 962
+x <- ifel(fakeStandsRast == 962, 1, NA)
+stack <- c(x, allMARast)
+df <- as.data.frame(stack, cell = TRUE) %>%
+  filter(Stand == 1) %>%
+  mutate(row = (cell - 1) %/% 1442 + 1,
+         col = (cell - 1) %% 1442 + 1)
+df %>% filter(forest_own1 == 2)
+allMARast[868,840] <- 1
+
+# Stand 1636
+x <- ifel(fakeStandsRast == 1636, 1, NA)
+stack <- c(x, allMARast)
+df <- as.data.frame(stack, cell = TRUE) %>%
+  filter(Stand == 1) %>%
+  mutate(row = (cell - 1) %/% 1442 + 1,
+         col = (cell - 1) %% 1442 + 1)
+df %>% filter(forest_own1 == 3)
+allMARast[921,1238] <- 2
+
+writeRaster(allMARast,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Harvest/managementAreas2.tif",
+            datatype = "INT1U",
+            NAflag = 0,
+            overwrite = TRUE)
+
+```
+
