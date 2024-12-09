@@ -20,4 +20,5 @@ Researchers and managers need to forecast the potential futures of the forests t
 
 
 References:
+
 Scheller, R. M., Domingo, J. B., Sturtevant, B. R., Williams, J. S., Rudy, A., Gustafson, E. J., & Mladenoff, D. J. (2007). Design, development, and application of LANDIS-II, a spatial landscape simulation model with flexible temporal and spatial resolution. ecological modelling, 201(3-4), 409-419.
