@@ -1,0 +1,939 @@
+---
+title: "TreeMap Biomass Calibration"
+output: pdf_document
+date: "2024-10-03"
+---
+
+```{r}
+library(rFIA)
+library(tidyverse)
+library(terra)
+library(sf)
+library(latex2exp)
+```
+
+
+```{r}
+# Read in Piedmont shapefile to then clip the NC FIA database
+Piedmont.shp <- st_read("C:/Users/lagoodal/Desktop/Ecoregion Level 3 Full/nc_eco_l3.shp")
+NC_FIA <- readFIA("C:/Users/lagoodal/Desktop/Dissertation Stuff/NC FIA")
+
+TREE <- NC_FIA$TREE
+COND <- NC_FIA$COND
+
+rm(NC_FIA)
+
+TREE$COUNTYCD <- sprintf("%03s", TREE$COUNTYCD)
+TREE$PLOT <- sprintf("%05s", TREE$PLOT)
+TREE$SUBP <- sprintf("%03s", TREE$SUBP)
+TREE$TREE <- sprintf("%03s", TREE$TREE)
+TREE <- TREE %>%
+  mutate(GEOID = paste0(COUNTYCD, PLOT),
+         TREEID = paste0(COUNTYCD, PLOT, SUBP, TREE))
+
+COND$COUNTYCD <- sprintf("%03s", COND$COUNTYCD)
+COND$PLOT <- sprintf("%05s", COND$PLOT)
+COND <- COND %>%
+  mutate(GEOID = paste0(COUNTYCD, PLOT))
+
+TREE <- TREE %>%
+  filter(SPGRPCD < 50,
+         INVYR %in% 2000:9000,
+         SPCD == c(68,110,121,129,131,132,221,222,316,403,409,531,541,544,611,621,693,694,711,762,802,806,812,820,827,831,832,833,835,837)) %>%
+  mutate(dummySPGRPCD = ifelse(SPGRPCD %in% 1:24, "Softwoods", "Hardwoods"))
+
+TREE$dummySPGRPCD <- ifelse(TREE$SPCD == 802 | TREE$SPCD == 820 | TREE$SPCD == 827 | TREE$SPCD == 831 | TREE$SPCD == 833, "Mesic Oaks", TREE$dummySPGRPCD)
+TREE$dummySPGRPCD <- ifelse(TREE$SPCD == 806 | TREE$SPCD == 812 | TREE$SPCD == 832 | TREE$SPCD == 835 | TREE$SPCD == 837, "Xeric Oaks", TREE$dummySPGRPCD)
+TREE$dummySPGRPCD <- ifelse(TREE$SPCD == 221 | TREE$SPCD == 222, "Cypress", TREE$dummySPGRPCD)
+TREE$dummySPGRPCD <- ifelse(TREE$SPCD == 802, "White Oak", TREE$dummySPGRPCD)
+
+treeTable <- full_join(TREE, COND, by = c("GEOID", "COUNTYCD", "PLT_CN", "INVYR", "STATECD", "UNITCD", "PLOT", "CONDID"))
+
+treeTable <- treeTable %>%
+  filter(INVYR < 9000,
+         SPCD < 998)
+
+treeTable <- treeTable[,c("GEOID", "TREEID", "CARBON_AG", "STDAGE", "INVYR", "SPCD", "dummySPGRPCD", "TPA_UNADJ")] %>%
+  unique()
+
+treeTable <- treeTable %>%
+  mutate(BIOMASS = CARBON_AG * 2,
+         BIOMASS_AC = BIOMASS * TPA_UNADJ,
+         BIOMASS_gm2 = BIOMASS_AC * 0.1121)
+
+
+treeTable <- treeTable %>%
+  mutate(binnedAGE = ifelse(STDAGE %in% 1:10, 10,
+                            ifelse(STDAGE %in% 11:20, 20,
+                                   ifelse(STDAGE %in% 21:30, 30,
+                                          ifelse(STDAGE %in% 31:40, 40,
+                                                 ifelse(STDAGE %in% 41:50, 50,
+                                                        ifelse(STDAGE %in% 51:60, 60,
+                                                               ifelse(STDAGE %in% 61:70, 70,
+                                                                      ifelse(STDAGE %in% 71:80, 80,
+                                                                             ifelse(STDAGE %in% 81:90, 90,
+                                                                                    ifelse(STDAGE %in% 91:100, 100,
+                                                                                           ifelse(STDAGE %in% 101:110, 110,
+                                                                                                  ifelse(STDAGE %in% 111:120, 120,
+                                                                                                         ifelse(STDAGE %in% 121:130, 130,
+                                                                                                                ifelse(STDAGE %in% 131:140, 140,
+                                                                                                                       ifelse(STDAGE %in% 141:150, 150, 160))))))))))))))))
+
+treeTable <- treeTable %>%
+  group_by(binnedAGE, dummySPGRPCD) %>%
+  filter(quantile(BIOMASS_gm2, 0.75, na.rm = T) < BIOMASS_gm2,
+         binnedAGE < 101)
+```
+
+# Oaks
+
+```{r}
+# Need to isolate cells where there is some oaks for me to test with
+
+# Read in IC map and ecoregions map
+mapIC <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Clipped Piedmont/finalTreeMap.tif")
+ecoregions <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Clipped Piedmont/ecoregions.tif")
+plot(mapIC)
+# Get MapCodes
+mapCodes <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/finalMapCodeDf.csv")
+
+# This bit has gone through several iterations but I will leave in the multicell landscape 
+# code examples rather than all of them
+
+# Here I am figuring out what MapCodes contain the species of interest and the cohort age criteria.
+# Then, for the MapCodes in the original finalMapCodeDf.csv file, for the matching criteria I am
+# removing all the other species so that when i run the biomass tests these MapCodes will only
+# be young Oak species. I will then export this reduced MapCode table to run the simulations with.
+
+# QUAL
+QUALcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QUAL")
+non_matching_mapcodes <- anti_join(mapCodes, QUALcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QUALcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+
+# Test to see if this filter matches the original QUALCodes df, if it does then we are good!
+# mapCodes %>% filter(MapCode %in% QUALcodes$MapCode)
+
+# The value here is a MapCode taken from QUALcodes. This will generate a list of cells that
+# match this criteria
+# cell_indices <- which(values(mapIC) == 48842)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QUCO2
+QUCO2codes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QUCO2")
+non_matching_mapcodes <- anti_join(mapCodes, QUCO2codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QUCO2codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 72933)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QUFA
+QUFAcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QUFA")
+non_matching_mapcodes <- anti_join(mapCodes, QUFAcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QUFAcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49932)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QULA3
+QULA3codes <- mapCodes %>%
+  filter(CohortAge == 20 & SpeciesName == "QULA3")
+non_matching_mapcodes <- anti_join(mapCodes, QULA3codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QULA3codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 60440)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QUNI
+QUNIcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QUNI")
+non_matching_mapcodes <- anti_join(mapCodes, QUNIcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QUNIcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49176)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QUPH
+QUPHcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QUPH")
+non_matching_mapcodes <- anti_join(mapCodes, QUPHcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QUPHcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49599)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QUPR2
+QUPR2codes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QUPR2")
+non_matching_mapcodes <- anti_join(mapCodes, QUPR2codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QUPR2codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 72080)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QURU
+QURUcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QURU")
+non_matching_mapcodes <- anti_join(mapCodes, QURUcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QURUcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 73026)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QUST
+QUSTcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QUST")
+non_matching_mapcodes <- anti_join(mapCodes, QUSTcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QUSTcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 72844)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# QUVE
+QUVEcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "QUVE")
+non_matching_mapcodes <- anti_join(mapCodes, QUVEcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, QUVEcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 73096)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+
+# Quick fix so that it all runs
+mapCodes[1,1] <- 0
+
+
+write_csv(mapCodes,
+          file = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Biomass Testing/oakTestMapCodes.csv",
+          append = FALSE)
+
+# Create young oak ecoregion map
+values(ecoregions) <- 0
+
+# QUAL
+ecoregions[675,1120] <- 1
+ecoregions[692,1089] <- 1
+ecoregions[700,1060] <- 1
+ecoregions[704,1053] <- 1
+ecoregions[707,1168] <- 1
+ecoregions[711,1140] <- 1
+ecoregions[720,1160] <- 1
+ecoregions[725,997] <- 1
+ecoregions[741,1156] <- 1
+ecoregions[699,1159] <- 1
+# QUCO2
+ecoregions[70,648] <- 1
+ecoregions[47,772] <- 1
+ecoregions[14,1034] <- 1
+ecoregions[20,1014] <- 1
+ecoregions[46,1099] <- 1
+ecoregions[50,772] <- 1
+ecoregions[304,468] <- 1
+ecoregions[293,506] <- 1
+ecoregions[88,709] <- 1
+ecoregions[108,621] <- 1
+# QUFA
+ecoregions[438,229] <- 1
+ecoregions[761,816] <- 1
+ecoregions[785,764] <- 1
+ecoregions[792,757] <- 1
+ecoregions[809,886] <- 1
+# QULA3
+ecoregions[510,1246] <- 1 
+ecoregions[599,1370] <- 1
+ecoregions[752,1023] <- 1
+ecoregions[768,1224] <- 1
+ecoregions[772,1066] <- 1
+ecoregions[814,1075] <- 1
+ecoregions[885,1138] <- 1
+ecoregions[893,1119] <- 1
+ecoregions[695,1217] <- 1
+ecoregions[584,1311] <- 1
+# QUNI
+ecoregions[624,1234] <- 1
+ecoregions[710,1157] <- 1
+ecoregions[721,1076] <- 1
+ecoregions[725,1077] <- 1
+ecoregions[728,1072] <- 1
+ecoregions[738,1024] <- 1
+ecoregions[742,1328] <- 1
+ecoregions[748,1130] <- 1
+ecoregions[751,1070] <- 1
+ecoregions[761,1105] <- 1
+# QUPH
+ecoregions[533,1243] <- 1
+ecoregions[615,1203] <- 1
+ecoregions[727,1042] <- 1
+ecoregions[743,1145] <- 1
+ecoregions[761,1109] <- 1
+ecoregions[762,1105] <- 1
+ecoregions[771,1178] <- 1
+ecoregions[780,1175] <- 1
+ecoregions[831,1116] <- 1
+ecoregions[890,1007] <- 1
+# QUPR2
+ecoregions[5,566] <- 1
+ecoregions[7,619] <- 1
+ecoregions[10,609] <- 1
+ecoregions[25,745] <- 1
+ecoregions[65,264] <- 1
+ecoregions[101,707] <- 1
+ecoregions[144,231] <- 1
+ecoregions[325,830] <- 1
+ecoregions[496,1145] <- 1
+ecoregions[560,690] <- 1
+# QURU
+ecoregions[21,957] <- 1
+ecoregions[100,354] <- 1
+ecoregions[277.139] <- 1
+ecoregions[361,99] <- 1
+ecoregions[390,16] <- 1
+ecoregions[430,278] <- 1
+ecoregions[474,188] <- 1
+ecoregions[505,371] <- 1
+ecoregions[526,1066] <- 1
+ecoregions[701,188] <- 1
+# QUST
+ecoregions[1,478] <- 1
+ecoregions[27,642] <- 1
+ecoregions[40,464] <- 1
+ecoregions[50,653] <- 1
+ecoregions[71,467] <- 1
+ecoregions[102,495] <- 1
+ecoregions[112,596] <- 1
+ecoregions[195,878] <- 1
+ecoregions[327,379] <- 1
+ecoregions[803,701] <- 1
+# QUVE
+ecoregions[31,1057] <- 1
+ecoregions[38,501] <- 1
+ecoregions[70,391] <- 1
+ecoregions[102,586] <- 1
+ecoregions[112,467] <- 1
+ecoregions[133,842] <- 1
+ecoregions[140,470] <- 1
+ecoregions[154,290] <- 1
+ecoregions[202,1001] <- 1
+ecoregions[517,285] <- 1
+
+
+writeRaster(ecoregions,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Biomass Testing/oaksEcoregions.tif",
+            datatype = "INT1U",
+            NAflag = 0,
+            overwrite = TRUE)
+
+
+plot(rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Biomass Testing/oaksEcoregions.tif"))
+```
+
+
+```{r}
+ggplot(treeTable %>% filter(dummySPGRPCD %in% c("Mesic Oaks", "Xeric Oaks", "White Oak")), aes(x = as.factor(binnedAGE), y = BIOMASS_gm2)) +
+  geom_boxplot() +
+  geom_point(alpha = 0) +
+  geom_smooth(method = "lm", aes(group = 1)) +
+  theme_classic() +
+  ylim(0,5100) +
+  facet_wrap(~dummySPGRPCD) +
+  xlab("Stand Age") +
+  ylab(TeX("AGB $(\\g/m^2)$")) +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 9, dummySPGRPCD = "Mesic Oaks"), col = "red") + # QURU
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 62, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 139, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 243, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 417, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 623, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 813, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 968, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 1090, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 1185, dummySPGRPCD = "Mesic Oaks"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 11, dummySPGRPCD = "Mesic Oaks"), col = "yellow") + # QUPH
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 138, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 452, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 836, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 1281, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 1630, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 1887, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 2077, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 2213, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 2303, dummySPGRPCD = "Mesic Oaks"), col = "yellow") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 32, dummySPGRPCD = "White Oak"), col = "forestgreen") + # QUAL
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 273, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 449, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 602, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 871, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 1046, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 1135, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 1232, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 1322, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 1406, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 3, dummySPGRPCD = "Xeric Oaks"), col = "blue") + # QUPR2
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 121, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 448, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 837, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 1236, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 1551, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 1770, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 1921, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 2024, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 2093, dummySPGRPCD = "Xeric Oaks"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 19, dummySPGRPCD = "Xeric Oaks"), col = "orange") + # QUCO2
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 99, dummySPGRPCD = "Xeric Oaks"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 269, dummySPGRPCD = "Xeric Oaks"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 512, dummySPGRPCD = "Xeric Oaks"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 828, dummySPGRPCD = "Xeric Oaks"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 1126, dummySPGRPCD = "Xeric Oaks"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 1374, dummySPGRPCD = "Xeric Oaks"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 1574, dummySPGRPCD = "Xeric Oaks"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 1742, dummySPGRPCD = "Xeric Oaks"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 1885, dummySPGRPCD = "Xeric Oaks"), col = "orange")
+
+
+
+
+
+  # geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 55, dummySPGRPCD = "White Oak"), col = "forestgreen") + # QUAL
+  # geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 176, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  # geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 404, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  # geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 718, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  # geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 1126, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  # geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 1500, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  # geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 1800, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  # geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 2041, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  # geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 2238, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+  # geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 2417, dummySPGRPCD = "White Oak"), col = "forestgreen") +
+```
+
+
+# Hardwoods
+
+```{r}
+mapIC <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/finalTreeMap.tif")
+ecoregions <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/ecoregions.tif")
+plot(mapIC)
+mapCodes <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/finalMapCodeDf.csv")
+
+# LITU
+LITUcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "LITU")
+non_matching_mapcodes <- anti_join(mapCodes, LITUcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, LITUcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49340)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+# CAAL27
+CAAL27codes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "CAAL27")
+non_matching_mapcodes <- anti_join(mapCodes, CAAL27codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, CAAL27codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 72838)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+# CAGL8
+CAGL8codes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "CAGL8")
+non_matching_mapcodes <- anti_join(mapCodes, CAGL8codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, CAGL8codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49763)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+# ACRU
+ACRUcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "ACRU")
+non_matching_mapcodes <- anti_join(mapCodes, ACRUcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, ACRUcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49591)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# LIST2
+LIST2codes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "LIST2")
+non_matching_mapcodes <- anti_join(mapCodes, LIST2codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, LIST2codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49082)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# Quick fix again
+mapCodes[1,1] <- 0
+
+write_csv(mapCodes,
+          file = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Biomass Testing/hardwoodTestMapCodes.csv",
+          append = FALSE)
+
+# Create young hardwoods ecoregion map
+values(ecoregions) <- 0
+
+# LITU
+ecoregions[980,1178] <- 1
+ecoregions[986,1182] <- 1
+ecoregions[987,1181] <- 1
+ecoregions[989,1177] <- 1
+ecoregions[992,1176] <- 1
+ecoregions[993,1130] <- 1
+ecoregions[993,1131] <- 1
+ecoregions[994,1180] <- 1
+ecoregions[994,1181] <- 1
+ecoregions[998,1169] <- 1
+
+# CAAL27
+ecoregions[37,1002] <- 1
+ecoregions[32,594] <- 1
+ecoregions[14,1035] <- 1
+ecoregions[50,915] <- 1
+ecoregions[46,450] <- 1
+ecoregions[13,1034] <- 1
+ecoregions[110,552] <- 1
+ecoregions[108,644] <- 1
+ecoregions[132,628] <- 1
+ecoregions[120,420] <- 1
+
+# CAGL8
+ecoregions[306,428] <- 1
+ecoregions[600,999] <- 1
+ecoregions[642,1256] <- 1
+ecoregions[653,1249] <- 1
+ecoregions[656,1084] <- 1
+ecoregions[664,1250] <- 1
+ecoregions[671,1272] <- 1
+ecoregions[678,1287] <- 1
+ecoregions[688,1309] <- 1
+ecoregions[700,1285] <- 1
+
+# ACRU
+ecoregions[894,1048] <- 1
+ecoregions[958,1079] <- 1
+ecoregions[961,1075] <- 1
+ecoregions[966,1069] <- 1
+ecoregions[968,1082] <- 1
+ecoregions[969,1082] <- 1
+ecoregions[978,1149] <- 1
+ecoregions[986,1125] <- 1
+ecoregions[991,1183] <- 1
+
+# LIST2
+ecoregions[622,1159] <- 1
+ecoregions[633,820] <- 1
+ecoregions[633,831] <- 1
+ecoregions[660,1078] <- 1
+ecoregions[669,1334] <- 1
+ecoregions[686,1049] <- 1
+ecoregions[698,771] <- 1
+ecoregions[710,781] <- 1
+ecoregions[715,951] <- 1
+ecoregions[718,847] <- 1
+
+
+writeRaster(ecoregions,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Biomass Testing/hardwoodsEcoregions.tif",
+            datatype = "INT1U",
+            NAflag = 0,
+            overwrite = TRUE)
+```
+
+
+```{r}
+ggplot(treeTable %>% filter(dummySPGRPCD %in% c("Hardwoods")), aes(x = as.factor(binnedAGE), y = BIOMASS_gm2)) +
+  geom_boxplot() +
+  geom_point(alpha = 0) +
+  geom_smooth(method = "loess", aes(group = 1)) +
+  theme_classic() +
+  ylim(0,5100) +
+  facet_wrap(~dummySPGRPCD) +
+  xlab("Stand Age") +
+  ylab(TeX("AGB $(\\g/m^2)$")) +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 11, dummySPGRPCD = "Hardwoods"), col = "red") + # ACRU
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 57, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 102, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 148, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 225, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 321, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 421, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 516, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 598, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 654, dummySPGRPCD = "Hardwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 27, dummySPGRPCD = "Hardwoods"), col = "blue") + # LITU
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 68, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 107, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 148, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 218, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 306, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 392, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 481, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 571, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 655, dummySPGRPCD = "Hardwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 12, dummySPGRPCD = "Hardwoods"), col = "forestgreen") + # CAAL27
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 121, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 354, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 678, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 1061, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 1354, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 1570, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 1745, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 1897, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 2038, dummySPGRPCD = "Hardwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 11, dummySPGRPCD = "Hardwoods"), col = "firebrick") + # CAGL8
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 67, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 132, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 224, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 367, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 515, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 638, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 746, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 827, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 888, dummySPGRPCD = "Hardwoods"), col = "firebrick") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 21, dummySPGRPCD = "Hardwoods"), col = "orange") + # LIST2
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 67, dummySPGRPCD = "Hardwoods"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 110, dummySPGRPCD = "Hardwoods"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 159, dummySPGRPCD = "Hardwoods"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 244, dummySPGRPCD = "Hardwoods"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 340, dummySPGRPCD = "Hardwoods"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 430, dummySPGRPCD = "Hardwoods"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 520, dummySPGRPCD = "Hardwoods"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 615, dummySPGRPCD = "Hardwoods"), col = "orange") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 713, dummySPGRPCD = "Hardwoods"), col = "orange")
+
+```
+
+# Softwoods
+
+```{r}
+mapIC <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/finalTreeMap.tif")
+ecoregions <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/ecoregions.tif")
+plot(mapIC)
+mapCodes <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/finalMapCodeDf.csv")
+
+# PITA
+PITAcodes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "PITA")
+non_matching_mapcodes <- anti_join(mapCodes, PITAcodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, PITAcodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 72525)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# PIPA2
+PIPA2codes <- mapCodes %>%
+  filter(CohortAge == 10 & SpeciesName == "PIPA2")
+non_matching_mapcodes <- anti_join(mapCodes, PIPA2codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, PIPA2codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49565)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# PIEC2
+PIEC2codes <- mapCodes %>%
+  filter(CohortAge == 20 & SpeciesName == "PIEC2")
+non_matching_mapcodes <- anti_join(mapCodes, PIEC2codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, PIEC2codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49063)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# Quick fix again
+mapCodes[1,1] <- 0
+
+write_csv(mapCodes,
+          file = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Biomass Testing/softwoodTestMapCodes.csv",
+          append = FALSE)
+
+# Create young softwoods ecoregion map
+values(ecoregions) <- 0
+
+# PITA
+ecoregions[77,448] <- 1
+ecoregions[81,437] <- 1
+ecoregions[82,440] <- 1
+ecoregions[103,439] <- 1
+ecoregions[109,436] <- 1
+ecoregions[116,874] <- 1
+ecoregions[120,444] <- 1
+ecoregions[12,318] <- 1
+ecoregions[131,909] <- 1
+ecoregions[135,719] <- 1
+
+# PIPA2
+ecoregions[190,979] <- 1
+ecoregions[254,538] <- 1
+ecoregions[291,1004] <- 1
+ecoregions[300,260] <- 1
+ecoregions[300,1242] <- 1
+ecoregions[308,402] <- 1
+ecoregions[321,318] <- 1
+ecoregions[323,355] <- 1
+ecoregions[344,1287] <- 1
+ecoregions[348,744] <- 1
+
+# PIEC2
+ecoregions[602,1256] <- 1
+ecoregions[608,1083] <- 1
+ecoregions[614,1306] <- 1
+ecoregions[617,1333] <- 1
+ecoregions[619,1004] <- 1
+ecoregions[621,1286] <- 1
+ecoregions[622,959] <- 1
+ecoregions[627,1335] <- 1
+ecoregions[629,559] <- 1
+ecoregions[632,1279] <- 1
+
+writeRaster(ecoregions,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Biomass Testing/softwoodsEcoregions.tif",
+            datatype = "INT1U",
+            NAflag = 0,
+            overwrite = TRUE)
+```
+
+
+```{r}
+ggplot(treeTable %>% filter(dummySPGRPCD %in% c("Softwoods")), aes(x = as.factor(binnedAGE), y = BIOMASS_gm2)) +
+  geom_boxplot() +
+  geom_point(alpha = 0) +
+  geom_smooth(method = "loess", aes(group = 1)) +
+  theme_classic() +
+  ylim(0,5100) +
+  facet_wrap(~dummySPGRPCD) +
+  xlab("Stand Age") +
+  ylab(TeX("AGB $(\\g/m^2)$")) +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 44, dummySPGRPCD = "Softwoods"), col = "red") + # PITA
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 157, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 283, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 449, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 738, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 944, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 1120, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 1281, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 1419, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 1531, dummySPGRPCD = "Softwoods"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 10, BIOMASS_gm2 = 2, dummySPGRPCD = "Softwoods"), col = "blue") + # PIPA2
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 82, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 178, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 300, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 514, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 688, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 852, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 1013, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 1165, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 1303, dummySPGRPCD = "Softwoods"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 12, dummySPGRPCD = "Softwoods"), col = "forestgreen") + # PIEC2
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 108, dummySPGRPCD = "Softwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 223, dummySPGRPCD = "Softwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 376, dummySPGRPCD = "Softwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 676, dummySPGRPCD = "Softwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 910, dummySPGRPCD = "Softwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 1120, dummySPGRPCD = "Softwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 1318, dummySPGRPCD = "Softwoods"), col = "forestgreen") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 1498, dummySPGRPCD = "Softwoods"), col = "forestgreen")
+
+
+```
+
+# Cypress
+
+```{r}
+mapIC <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/finalTreeMap.tif")
+ecoregions <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/ecoregions.tif")
+plot(mapIC)
+mapCodes <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/finalMapCodeDf.csv")
+
+# TAAS
+TAAScodes <- mapCodes %>%
+  filter(CohortAge == 60 & SpeciesName == "TAAS")
+non_matching_mapcodes <- anti_join(mapCodes, TAAScodes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, TAAScodes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 49399)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# TADI2
+TADI2codes <- mapCodes %>%
+  filter(CohortAge == 20 & SpeciesName == "TADI2")
+non_matching_mapcodes <- anti_join(mapCodes, TADI2codes, by = "MapCode")
+matching_mapcodes <- inner_join(mapCodes, TADI2codes, by = c("MapCode", "SpeciesName", "CohortAge", "CohortBiomass"))
+mapCodes <- bind_rows(non_matching_mapcodes, matching_mapcodes)
+# cell_indices <- which(values(mapIC) == 48630)
+# row_col_indices <- rowColFromCell(mapIC, cell_indices)
+# row_col_indices
+# values(ecoregions) <- 0
+# for (i in 1:nrow(row_col_indices)) {
+#   ecoregions[row_col_indices[,1][i], row_col_indices[,2][i]] <- 1
+# }
+
+# Quick fix again
+mapCodes[1,1] <- 0
+
+write_csv(mapCodes,
+          file = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Biomass Testing/cypressTestMapCodes.csv",
+          append = FALSE)
+
+# Create young softwoods ecoregion map
+values(ecoregions) <- 0
+
+# TAAS
+ecoregions[553,1330] <- 1
+ecoregions[554,1332] <- 1
+ecoregions[560,1340] <- 1
+ecoregions[561,1332] <- 1
+ecoregions[563,1335] <- 1
+ecoregions[565,1332] <- 1
+ecoregions[566,1332] <- 1
+ecoregions[569,1339] <- 1
+ecoregions[569,1347] <- 1
+ecoregions[570,1339] <- 1
+
+# TADI2
+ecoregions[488,326] <- 1
+ecoregions[489,326] <- 1
+ecoregions[510,330] <- 1
+ecoregions[552,1266] <- 1
+ecoregions[554,686] <- 1
+ecoregions[563,1162] <- 1
+ecoregions[605,242] <- 1
+ecoregions[607,245] <- 1
+ecoregions[692,413] <- 1
+ecoregions[715,577] <- 1
+
+writeRaster(ecoregions,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Biomass Testing/cypressEcoregions.tif",
+            datatype = "INT1U",
+            NAflag = 0,
+            overwrite = TRUE)
+```
+
+
+
+
+
+```{r}
+ggplot(treeTable %>% filter(dummySPGRPCD %in% c("Cypress")), aes(x = as.factor(binnedAGE), y = BIOMASS_gm2)) +
+  geom_boxplot() +
+  geom_point(alpha = 0) +
+  geom_smooth(method = "loess", aes(group = 1)) +
+  theme_classic() +
+  ylim(0,5100) +
+  facet_wrap(~dummySPGRPCD) +
+  xlab("Stand Age") +
+  ylab(TeX("AGB $(\\g/m^2)$")) +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 186, dummySPGRPCD = "Cypress"), col = "red") + # TAAS
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 298, dummySPGRPCD = "Cypress"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 441, dummySPGRPCD = "Cypress"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 625, dummySPGRPCD = "Cypress"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 912, dummySPGRPCD = "Cypress"), col = "red") +
+  geom_point(data = data.frame(binnedAGE = 20, BIOMASS_gm2 = 20, dummySPGRPCD = "Cypress"), col = "blue") + # TADI2
+  geom_point(data = data.frame(binnedAGE = 30, BIOMASS_gm2 = 126, dummySPGRPCD = "Cypress"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 40, BIOMASS_gm2 = 232, dummySPGRPCD = "Cypress"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 50, BIOMASS_gm2 = 349, dummySPGRPCD = "Cypress"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 60, BIOMASS_gm2 = 534, dummySPGRPCD = "Cypress"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 70, BIOMASS_gm2 = 754, dummySPGRPCD = "Cypress"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 80, BIOMASS_gm2 = 972, dummySPGRPCD = "Cypress"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 90, BIOMASS_gm2 = 1186, dummySPGRPCD = "Cypress"), col = "blue") +
+  geom_point(data = data.frame(binnedAGE = 100, BIOMASS_gm2 = 1385, dummySPGRPCD = "Cypress"), col = "blue")
+
+```
+
+
+
+
+
+
+
+
