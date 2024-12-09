@@ -1,0 +1,1435 @@
+---
+title: "Untitled"
+output: pdf_document
+date: "2024-08-22"
+---
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(terra)
+library(sf)
+```
+
+# Test 1 (Resilience)
+
+```{r}
+# SOMTC
+input_directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 1/SOMTC"
+SOMTC_files <- list.files(input_directory, pattern = "\\.img$", full.names = TRUE)
+SOMTC <- list()
+for (i in input_directory) {
+  SOMTC[[i]] <- rast(SOMTC_files)
+}
+
+SOMTCDf <- cbind(SOMTC[[1]][[1]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[3]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[4]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[5]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[6]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[7]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[8]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[9]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[10]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SOMTC[[1]][[2]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1))) %>%
+  t() %>%
+  as.data.frame() %>%
+  mutate(Year = 1:nrow(.)) %>%
+  `colnames<-`(c("SOMTC", "Year"))
+
+ggplot(SOMTCDf, aes(x = Year, y = SOMTC)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  ylim(0,2000)
+
+
+# Soil N
+input_directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 1/Soil N"
+SoilN_files <- list.files(input_directory, pattern = "\\.img$", full.names = TRUE)
+SoilN <- list()
+for (i in input_directory) {
+  SoilN[[i]] <- rast(SoilN_files)
+}
+
+SoilNDf <- cbind(SoilN[[1]][[1]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[3]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[4]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[5]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[6]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[7]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[8]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[9]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[10]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1)),
+SoilN[[1]][[2]] %>% as.data.frame() %>% summarise(mean = mean(Layer_1))) %>%
+  t() %>%
+  as.data.frame() %>%
+  mutate(Year = 1:nrow(.)) %>%
+  `colnames<-`(c("SoilN", "Year"))
+
+ggplot(SoilNDf, aes(x = Year, y = SoilN)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  ylim(0,4000)
+```
+
+
+
+# Test 2 (Resistance) (Half run)
+
+```{r}
+# Carbon
+logNECN <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 2/Data Frames/NECN-succession-log.csv")
+logNECNCarbon <- logNECN[,c(1,3,6,25:28)]
+logNECNCarbon <- pivot_longer(logNECNCarbon, cols = SOMTC:C_SOM3, names_to = "Pool", values_to = "Carbon")
+ggplot(logNECNCarbon, aes(x = Time, y = Carbon, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+# Nitrogen
+logNECNNitrogen <- logNECN[,c(1,3,58,39:42)]
+logNECNNitrogen <- pivot_longer(logNECNNitrogen, cols = TotalSoilN:N_SOM3, names_to = "Pool", values_to = "Nitrogen")
+ggplot(logNECNNitrogen, aes(x = Time, y = Nitrogen, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+```
+
+# Test 3 Resilience (Full Run)
+
+```{r}
+# Carbon
+logNECN <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 3/Data Frames/NECN-succession-log.csv")
+logNECNCarbon <- logNECN[,c(1,3,6,25:28)]
+logNECNCarbon <- pivot_longer(logNECNCarbon, cols = SOMTC:C_SOM3, names_to = "Pool", values_to = "Carbon")
+ggplot(logNECNCarbon, aes(x = Time, y = Carbon, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+# Nitrogen
+logNECNNitrogen <- logNECN[,c(1,3,58,39:42)]
+logNECNNitrogen <- pivot_longer(logNECNNitrogen, cols = TotalSoilN:N_SOM3, names_to = "Pool", values_to = "Nitrogen")
+ggplot(logNECNNitrogen, aes(x = Time, y = Nitrogen, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+```
+
+
+
+# Test 4 Resilience (90% N)
+
+```{r}
+# Carbon
+logNECN <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 4/Data Frames/NECN-succession-log.csv")
+logNECNCarbon <- logNECN[,c(1,3,6,25:28)]
+logNECNCarbon <- pivot_longer(logNECNCarbon, cols = SOMTC:C_SOM3, names_to = "Pool", values_to = "Carbon")
+ggplot(logNECNCarbon, aes(x = Time, y = Carbon, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+# Nitrogen
+logNECNNitrogen <- logNECN[,c(1,3,58,39:42)]
+logNECNNitrogen <- pivot_longer(logNECNNitrogen, cols = TotalSoilN:N_SOM3, names_to = "Pool", values_to = "Nitrogen")
+ggplot(logNECNNitrogen, aes(x = Time, y = Nitrogen, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+```
+
+# Test 5 Resilience (80% N) (30 year Run)
+
+```{r}
+# Carbon
+logNECN <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 5/Data Frames/NECN-succession-log.csv")
+logNECNCarbon <- logNECN[,c(1,3,6,25:28)]
+logNECNCarbon <- pivot_longer(logNECNCarbon, cols = SOMTC:C_SOM3, names_to = "Pool", values_to = "Carbon")
+ggplot(logNECNCarbon, aes(x = Time, y = Carbon, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+# Nitrogen
+logNECNNitrogen <- logNECN[,c(1,3,58,39:42)]
+logNECNNitrogen <- pivot_longer(logNECNNitrogen, cols = TotalSoilN:N_SOM3, names_to = "Pool", values_to = "Nitrogen")
+ggplot(logNECNNitrogen, aes(x = Time, y = Nitrogen, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+```
+
+
+# Test 6 Resilience (80% N)
+
+```{r}
+# Carbon
+logNECN <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 6 (New LAI)/Data Frames/NECN-succession-log.csv")
+logNECNCarbon <- logNECN[,c(1,3,6,25:28)]
+logNECNCarbon <- pivot_longer(logNECNCarbon, cols = SOMTC:C_SOM3, names_to = "Pool", values_to = "Carbon")
+ggplot(logNECNCarbon, aes(x = Time, y = Carbon, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+# Nitrogen
+logNECNNitrogen <- logNECN[,c(1,3,58,39:42)]
+logNECNNitrogen <- pivot_longer(logNECNNitrogen, cols = TotalSoilN:N_SOM3, names_to = "Pool", values_to = "Nitrogen")
+ggplot(logNECNNitrogen, aes(x = Time, y = Nitrogen, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+```
+
+# Test 7 Resilience (50% N)
+
+```{r}
+# Carbon
+logNECN <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 7/Data Frames/NECN-succession-log.csv")
+logNECNCarbon <- logNECN[,c(1,3,6,25:28)]
+logNECNCarbon <- pivot_longer(logNECNCarbon, cols = SOMTC:C_SOM3, names_to = "Pool", values_to = "Carbon")
+ggplot(logNECNCarbon, aes(x = Time, y = Carbon, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+# Nitrogen
+logNECNNitrogen <- logNECN[,c(1,3,58,39:42)]
+logNECNNitrogen <- pivot_longer(logNECNNitrogen, cols = TotalSoilN:N_SOM3, names_to = "Pool", values_to = "Nitrogen")
+ggplot(logNECNNitrogen, aes(x = Time, y = Nitrogen, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+```
+
+# TEst 8 (NEW SOILS)
+
+```{r}
+# Carbon
+logNECN <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/LANDIS Outputs/Test 8/Data Frames/NECN-succession-log.csv")
+logNECNCarbon <- logNECN[,c(1,3,6,25:28)]
+logNECNCarbon <- pivot_longer(logNECNCarbon, cols = SOMTC:C_SOM3, names_to = "Pool", values_to = "Carbon")
+ggplot(logNECNCarbon, aes(x = Time, y = Carbon, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+
+
+# Nitrogen
+logNECNNitrogen <- logNECN[,c(1,3,58,39:42)]
+logNECNNitrogen <- pivot_longer(logNECNNitrogen, cols = TotalSoilN:N_SOM3, names_to = "Pool", values_to = "Nitrogen")
+ggplot(logNECNNitrogen, aes(x = Time, y = Nitrogen, col = Pool)) +
+  geom_line(size = 1.5) +
+  theme_classic() +
+  facet_wrap(~ClimateRegionIndex)
+```
+
+
+
+
+```{r}
+# New Soil Raster Ratios
+# Read in clipped landscape and the soil shapefile, transform and crop to clipped landscape
+landscape <- st_read("C:/Users/lagoodal/Desktop/All Raster Layers/standsraster/Clipped Shapefile/clippedHUC.shp")
+westSoil <- st_read("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/West_Soil_Carbon_1238/data/statsgo1poly/statsgo1poly.shp") %>%
+  st_transform(crs = crs(landscape)) %>%
+  st_crop(landscape)
+
+# Create new column for SOMTC
+westSoil$SOMTC <- westSoil$OC0_20cm + westSoil$OC20_40cm + westSoil$OC40_60cm + westSoil$OC60_80cm + westSoil$OC80_100cm
+st_write(westSoil,
+         "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/West_Soil_Carbon_1238/New Map/westSoil.shp",
+         overwrite = TRUE)
+westSoil <- st_read("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/West_Soil_Carbon_1238/New Map/westSoil.shp")
+
+# Rasterize and mask
+soilRast <- rasterize(westSoil, SOM1soilC, field = "SOMTC")
+soilRast <- soilRast %>% mask(landscape[1])
+
+SOM1surfC <- soilRast
+values(SOM1surfC) <- values(SOM1surfC) * 0.01
+SOM1surfN <- SOM1surfC
+values(SOM1surfN) <- values(SOM1surfC) * 0.1
+
+SOM1soilC <- soilRast
+values(SOM1soilC) <- values(SOM1soilC) * 0.02
+SOM1soilN <- SOM1soilC
+values(SOM1soilN) <- values(SOM1soilN) * 0.1
+
+SOM2C <- soilRast
+values(SOM2C) <- values(SOM2C) * 0.59
+SOM2N <- SOM2C
+values(SOM2N) <- values(SOM2C) * 0.04
+
+SOM3C <- soilRast
+values(SOM3C) <- values(SOM3C) * 0.38
+SOM3N <- SOM3C
+values(SOM3N) <- values(SOM3C) * 0.118
+
+
+plot(SOM1surfC)
+plot(SOM1soilC)
+plot(SOM2C)
+plot(SOM3C)
+plot(SOM1surfN)
+plot(SOM1soilN)
+plot(SOM2N)
+plot(SOM3N)
+
+names(SOM1surfC) <- "SOM1surfC"
+names(SOM1soilC) <- "SOM1soilC"
+names(SOM2C) <- "SOM2C"
+names(SOM3C) <- "SOM3C"
+names(SOM1surfN) <- "SOM1surfN"
+names(SOM1soilN) <- "SOM1soilN"
+names(SOM2N) <- "SOM2N"
+names(SOM3N) <- "SOM3N"
+
+soilRastList <- list(SOM1soilC, SOM1surfC, SOM2C, SOM3C, SOM1soilN, SOM1surfN, SOM2N, SOM3N)
+
+
+writeRaster(SOM2C,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/test1/Clipped Piedmont/SOM2C.tif",
+            overwrite = TRUE,
+            datatype = "FLT4S",
+            NAflag = 1.1)
+
+
+
+deadwood <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/test1/Clipped Piedmont/Deadwood.tif")
+deadroots <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/test1/Clipped Piedmont/DeadRoots.tif")
+
+plot(deadwood)
+plot(deadroots)
+```
+
+# Spin up Ratios
+# Iteration 1
+
+```{r}
+# Read in clipped landscape and the soil shapefile, transform and crop to clipped landscape
+landscape <- st_read("C:/Users/lagoodal/Desktop/All Raster Layers/standsraster/Clipped Shapefile/clippedHUC.shp")
+westSoil <- st_read("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/West_Soil_Carbon_1238/data/statsgo1poly/statsgo1poly.shp") %>%
+  st_transform(crs = crs(landscape)) %>%
+  st_crop(landscape)
+
+# Create new column for SOMTC
+westSoil$SOMTC <- westSoil$OC0_20cm + westSoil$OC20_40cm + westSoil$OC40_60cm + westSoil$OC60_80cm + westSoil$OC80_100cm
+st_write(westSoil,
+         "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/West_Soil_Carbon_1238/New Map/westSoil.shp",
+         overwrite = TRUE)
+westSoil <- st_read("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/West_Soil_Carbon_1238/New Map/westSoil.shp")
+
+# Read in a soil raster to be used as a template
+SOM1soilC <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/Small Landscape/Clipped Piedmont/SOM1soilC.tif")
+
+# Rasterize and mask
+soilRast <- rasterize(westSoil, SOM1soilC, field = "SOMTC")
+soilRast <- soilRast %>% mask(landscape[1])
+
+plot(soilRast)
+
+# Assign new soil C/N values based upon our new ratios
+SOM1surfC <- soilRast
+values(SOM1surfC) <- values(SOM1surfC) * 0.5
+SOM1surfN <- SOM1surfC
+values(SOM1surfN) <- values(SOM1surfC) / 50
+
+SOM1soilC <- soilRast
+values(SOM1soilC) <- values(SOM1soilC) * 0.862
+SOM1soilN <- SOM1soilC
+values(SOM1soilN) <- values(SOM1soilN) / 8.62
+
+SOM2C <- soilRast
+values(SOM2C) <- values(SOM2C) * 0.3448
+SOM2N <- SOM2C
+values(SOM2N) <- values(SOM2C) / 34.48
+
+SOM3C <- soilRast
+values(SOM3C) <- values(SOM3C) * 0.069
+SOM3N <- SOM3C
+values(SOM3N) <- values(SOM3C) / 6.90
+
+
+writeRaster(SOM3C,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/Small Landscape/Test Rasters/SOM3C.tif",
+            overwrite = TRUE,
+            datatype = "FLT4S",
+            NAflag = 1.1)
+```
+
+# Iteration 2
+
+```{r}
+# Assign new soil C/N values based upon our new ratios
+SOM1surfC <- soilRast
+values(SOM1surfC) <- values(SOM1surfC) * 0.4959
+SOM1surfN <- SOM1surfC
+values(SOM1surfN) <- values(SOM1surfC) / 49.49
+
+SOM1soilC <- soilRast
+values(SOM1soilC) <- values(SOM1soilC) * 0.826
+SOM1soilN <- SOM1soilC
+values(SOM1soilN) <- values(SOM1soilN) / 8.26
+
+SOM2C <- soilRast
+values(SOM2C) <- values(SOM2C) * 0.3636
+SOM2N <- SOM2C
+values(SOM2N) <- values(SOM2C) / 36.36
+
+SOM3C <- soilRast
+values(SOM3C) <- values(SOM3C) * 0.0579
+SOM3N <- SOM3C
+values(SOM3N) <- values(SOM3C) / 5.79
+
+
+writeRaster(SOM3C,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/Small Landscape/Test Rasters/SOM3C_B.tif",
+            overwrite = TRUE,
+            datatype = "FLT4S",
+            NAflag = 1.1)
+```
+
+
+
+# Get soilgrid data
+
+
+```{r}
+# Data was cross-referenced with Franzluebbers, (2023) doi:10.2489/jswc.2023.00064
+
+# Read in data and project the raster
+soilMap <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/Soil Grid Data/Soil_Grid_Map.tif")
+# crs(soilMap) <- "EPSG:4326"
+clippedPiedmont.shp <- st_read("C:/Users/lagoodal/Desktop/All Raster Layers/standsraster/Clipped Shapefile/clippedHUC.shp") %>%
+  st_transform(crs = crs(soilMap))
+
+# templateRast <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/Small Landscape/Clipped Piedmont/SOM1surfN.tif")
+templateRast <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/finalTreeMap.tif")
+
+# Crop and mask it
+soilMap <- terra::crop(soilMap, clippedPiedmont.shp[1])
+soilMap <- terra::mask(soilMap, clippedPiedmont.shp[1])
+
+# Change soil values form t/ha to g/m2
+values(soilMap) <- values(soilMap) * 100
+
+soilMap <- terra::project(soilMap, templateRast)
+
+# # Assign new soil C/N values based upon our new ratios
+# SOM1surfC <- soilMap
+# values(SOM1surfC) <- values(SOM1surfC) * 0.4959
+# values(SOM1surfC) <- values(SOM1surfC) + 1.1
+# SOM1surfN <- SOM1surfC
+# values(SOM1surfN) <- values(SOM1surfC) / (49.49 * 2) # Halved to see if will affect SOM1surf C levels
+# values(SOM1surfN) <- values(SOM1surfN) + 1.1
+# 
+# SOM1soilC <- soilMap
+# values(SOM1soilC) <- values(SOM1soilC) * 0.826
+# values(SOM1soilC) <- values(SOM1soilC) + 1.1
+# SOM1soilN <- SOM1soilC
+# values(SOM1soilN) <- values(SOM1soilN) / 11  # 8.26
+# values(SOM1soilN) <- values(SOM1soilN) + 1.1
+# 
+# SOM2C <- soilMap
+# values(SOM2C) <- values(SOM2C) * 0.3636
+# values(SOM2C) <- values(SOM2C) + 1.1
+# SOM2N <- SOM2C
+# values(SOM2N) <- values(SOM2C) * 36.36
+# values(SOM2N) <- values(SOM2N) + 1.1
+# 
+# 
+# SOM3C <- soilMap
+# values(SOM3C) <- values(SOM3C) * 0.0579
+# values(SOM3C) <- values(SOM3C) + 1.1
+# SOM3N <- SOM3C
+# values(SOM3N) <- values(SOM3C) / 5.79
+# values(SOM3N) <- values(SOM3N) + 1.1
+
+#######################################################################
+# # Try the old ratios
+# 
+# SOM1surfC <- soilMap
+# values(SOM1surfC) <- values(SOM1surfC) * 0.1
+# SOM1surfN <- SOM1surfC
+# values(SOM1surfN) <- values(SOM1surfC) * 0.1
+# values(SOM1surfC) <- values(SOM1surfC) + 1.1
+# values(SOM1surfN) <- values(SOM1surfN) + 1.1
+# 
+# SOM1soilC <- soilMap
+# values(SOM1soilC) <- values(SOM1soilC) * 0.2
+# SOM1soilN <- SOM1soilC
+# values(SOM1soilN) <- values(SOM1soilN) * 0.1
+# values(SOM1soilC) <- values(SOM1soilC) + 1.1
+# values(SOM1soilN) <- values(SOM1soilN) + 1.1
+# 
+# 
+# SOM2C <- soilMap
+# values(SOM2C) <- values(SOM2C) * 0.59
+# SOM2N <- SOM2C
+# values(SOM2N) <- values(SOM2C) * 0.1 # OG = 0.04, trying to burn off some carbon
+# values(SOM2C) <- values(SOM2C) + 1.1
+# values(SOM2N) <- values(SOM2N) + 1.1
+# 
+# SOM3C <- soilMap
+# values(SOM3C) <- values(SOM3C) * 0.38
+# SOM3N <- SOM3C
+# values(SOM3N) <- values(SOM3C) * 0.118
+# values(SOM3C) <- values(SOM3C) + 1.1
+# values(SOM3N) <- values(SOM3N) + 1.1
+
+# #######################################################################
+# # Spinup ratios based off of runs with the old Zach ratios
+# 
+# SOM1surfC <- soilMap
+# values(SOM1surfC) <- values(SOM1surfC) * 0.3044879
+# SOM1surfN <- SOM1surfC
+# values(SOM1surfN) <- values(SOM1surfC) * 0.02083333
+# values(SOM1surfC) <- values(SOM1surfC) + 1.1
+# values(SOM1surfN) <- values(SOM1surfN) + 1.1
+# 
+# SOM1soilC <- soilMap
+# values(SOM1soilC) <- values(SOM1soilC) * 0.1775014
+# SOM1soilN <- SOM1soilC
+# values(SOM1soilN) <- values(SOM1soilN) * 0.125
+# values(SOM1soilC) <- values(SOM1soilC) + 1.1
+# values(SOM1soilN) <- values(SOM1soilN) + 1.1
+# 
+# 
+# SOM2C <- soilMap
+# values(SOM2C) <- values(SOM2C) * 0.1702547
+# SOM2N <- SOM2C
+# values(SOM2N) <- values(SOM2C) * 0.01282051
+# values(SOM2C) <- values(SOM2C) + 1.1
+# values(SOM2N) <- values(SOM2N) + 1.1
+# 
+# SOM3C <- soilMap
+# values(SOM3C) <- values(SOM3C) * 0.3477561
+# SOM3N <- SOM3C
+# values(SOM3N) <- values(SOM3C) * 0.125
+# values(SOM3C) <- values(SOM3C) + 1.1
+# values(SOM3N) <- values(SOM3N) + 1.1
+# 
+# plot(SOM2N)
+
+#######################################################################
+# Spinup ratios based off above but now it's Year 100
+
+SOM1surfC <- soilMap
+values(SOM1surfC) <- values(SOM1surfC) * 0.2525958
+SOM1surfN <- SOM1surfC
+values(SOM1surfN) <- values(SOM1surfC) * 0.01694915
+values(SOM1surfC) <- values(SOM1surfC) + 1.1
+values(SOM1surfN) <- values(SOM1surfN) + 1.1
+
+SOM1soilC <- soilMap
+values(SOM1soilC) <- values(SOM1soilC) * 0.2396167
+SOM1soilN <- SOM1soilC
+values(SOM1soilN) <- values(SOM1soilN) * 0.125
+values(SOM1soilC) <- values(SOM1soilC) + 1.1
+values(SOM1soilN) <- values(SOM1soilN) + 1.1
+
+
+SOM2C <- soilMap
+values(SOM2C) <- values(SOM2C) * 0.1971532
+SOM2N <- SOM2C
+values(SOM2N) <- values(SOM2C) * 0.01639344
+values(SOM2C) <- values(SOM2C) + 1.1
+values(SOM2N) <- values(SOM2N) + 1.1
+
+SOM3C <- soilMap
+values(SOM3C) <- values(SOM3C) * 0.3106126
+SOM3N <- SOM3C
+values(SOM3N) <- values(SOM3C) * 0.125
+values(SOM3C) <- values(SOM3C) + 1.1
+values(SOM3N) <- values(SOM3N) + 1.1
+
+plot(SOM3N)
+
+
+# writeRaster(SOM3C,
+#             filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/SOM3C_F.tif",
+#             overwrite = TRUE,
+#             datatype = "FLT4S",
+#             NAflag = 1.1)
+
+
+plot(soilMap)
+
+1 / 59
+1 / 8
+1 / 61
+1 / 8
+
+
+carbonDf %>% filter(Time == 50) %>% mutate(percent = g_m2 / 4719.4)
+carbonDf %>% filter(Time == 100) %>% mutate(percent = g_m2 / 4622.8)
+```
+
+
+
+# Create a small soils ecoregion
+
+```{r}
+ecoregions <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Clipped Piedmont/ecoregions.tif")
+
+values(ecoregions) <- 0
+ecoregions[400:410,1000:1010] <- 1
+
+plot(ecoregions)
+plot(piedmontOwnership)
+
+writeRaster(ecoregions,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/soilsEcoregion.tif",
+            overwrite = TRUE,
+            NAflag = NA,
+            datatype = "INT1U")
+```
+
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.2\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.2\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.2\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Test 1
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 1/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.2\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.2\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.2\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+
+# Test 2
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 2/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.5\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.5\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.5\nDecaySoil = 2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+# Test 3
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 3/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.5\nDecaySoil = 2.5\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.5\nDecaySoil = 2.5\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.5\nDecaySoil = 2.5\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+
+# Test 4
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 4/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.6\nDecaySoil = 3.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.6\nDecaySoil = 3.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.6\nDecaySoil = 3.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+# Different ecoregions because some of the biomasses were out of control
+
+# Test 5
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 5/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.6\nDecaySoil = 3.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.6\nDecaySoil = 3.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.6\nDecaySoil = 3.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+# Test on Biomass Harvest Area without harvesting
+
+# Test 6
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 6/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+# Test 7
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 7/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.3\nDecaySoil = 1.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.3\nDecaySoil = 1.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.3\nDecaySoil = 1.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+# Test 8
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 8/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.4\nDecaySoil = 1.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.4\nDecaySoil = 1.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.4\nDecaySoil = 1.2\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+# Test 9
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 9/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.4\nDecaySoil = 1.5\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1.4\nDecaySoil = 1.5\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1.4\nDecaySoil = 1.5\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+# Test 10
+# New LAIs
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/Storage/Soil Testing/Test 10/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+# Test 11
+
+```{r}
+successionLog <- read_csv("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Storage/Soil Testing/Test 11/NECN-succession-log.csv")
+
+# Carbon
+carbonDf <- successionLog %>% select(Time, SOMTC, C_SOM1surf, C_SOM1soil, C_SOM2, C_SOM3) %>% 
+  pivot_longer(cols = "SOMTC":"C_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(carbonDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("SOMTC" = "red", "C_SOM1surf" = "cornflowerblue", "C_SOM1soil" = "darkorchid", "C_SOM2" = "darkorange", "C_SOM3" = "darkgreen"))
+
+# Nitrogen
+nitrogenDf <- successionLog %>% select(Time, TotalSoilN, N_SOM1surf, N_SOM1soil, N_SOM2, N_SOM3) %>% 
+  pivot_longer(cols = "TotalSoilN":"N_SOM3", names_to = "Pool", values_to = "g_m2")
+ggplot(nitrogenDf, aes(x = Time, y = g_m2, col = Pool)) +
+  geom_line(size = 1) +
+  theme_classic() +
+  annotate("text", x = 27, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  scale_color_manual(values = c("TotalSoilN" = "red", "N_SOM1surf" = "cornflowerblue", "N_SOM1soil" = "darkorchid", "N_SOM2" = "darkorange", "N_SOM3" = "darkgreen"))
+
+# Ratio
+ratioDf <- rbind(carbonDf, nitrogenDf) %>%
+  pivot_wider(names_from = "Pool", values_from = "g_m2") %>%
+  mutate(Total = SOMTC / TotalSoilN,
+         Surf = C_SOM1surf / N_SOM1surf,
+         Soil = C_SOM1soil / N_SOM1soil,
+         SOM2 = C_SOM2 / N_SOM2,
+         SOM3 = C_SOM3 / N_SOM3) %>%
+  select(Time, Total, Surf, Soil, SOM2, SOM3) %>%
+  pivot_longer(cols = "Total":"SOM3", names_to = "Pool", values_to = "C:N Ratio")
+
+ggplot(ratioDf, aes(x = Time, y = `C:N Ratio`, col = Pool)) +
+  geom_line(size  = 1) +
+  theme_classic() +
+  ylim(0,80) +
+  annotate("text", x = 31, y = Inf, label = "DecaySurf = 1\nDecaySoil = 1\nDecaySOM2 = 0.5\nDecaySOM3 = 0.0000001\nDenitrification = 0.05\nNSlope = 0.05\nNIntercept = 0.3", 
+           hjust = 1, vjust = 1, size = 3, color = "black", 
+           fontface = "bold", family = "serif") +
+  theme(plot.margin = margin(10, 40, 10, 10)) +
+  scale_x_continuous(breaks = seq(0, 100, 10), limits = c(0,100)) +
+  # geom_hline(yintercept = 5, linetype = "dashed", col = "blue") +
+  geom_hline(yintercept = 40, linetype = "dashed") +
+  scale_color_manual(values = c("Total" = "red", "Surf" = "cornflowerblue", "Soil" = "darkorchid", "SOM2" = "darkorange", "SOM3" = "darkgreen"))
+
+```
+
+
+
+
+
+
+# LAI TEST
+
+```{r}
+# LAI
+input_directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap/NECN"
+# input_directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Harvest Testing/NECN" # CURRENTLY HARVEST TESTING
+LAI_files <- list.files(input_directory, pattern = "LAI.*\\.img$", full.names = TRUE)
+LAI <- list()
+for (i in input_directory) {
+  LAI[[i]] <- rast(LAI_files)
+}
+
+plot(LAI[[1]][[1]])
+plot(LAI[[1]][[3]])
+plot(LAI[[1]][[4]])
+plot(LAI[[1]][[5]])
+plot(LAI[[1]][[6]])
+plot(LAI[[1]][[7]])
+plot(LAI[[1]][[8]])
+plot(LAI[[1]][[9]])
+plot(LAI[[1]][[10]])
+plot(LAI[[1]][[2]])
+
+LAI1 <- LAI[[1]][[1]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(1) 
+LAI2 <- LAI[[1]][[3]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(2) 
+LAI3 <- LAI[[1]][[4]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(3) 
+LAI4 <- LAI[[1]][[5]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(4) 
+LAI5 <- LAI[[1]][[6]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(5) 
+LAI6 <- LAI[[1]][[7]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(6) 
+LAI7 <- LAI[[1]][[8]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(7) 
+LAI8 <- LAI[[1]][[9]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(8) 
+LAI9 <- LAI[[1]][[10]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(9)
+LAI10 <- LAI[[1]][[2]] %>% as.data.frame() %>% filter(Layer_1 > 0) %>% `colnames<-`(10)
+
+
+max_rows <- max(nrow(LAI1),nrow(LAI2),nrow(LAI3),nrow(LAI4),nrow(LAI5),nrow(LAI6),nrow(LAI7),nrow(LAI8),nrow(LAI9),nrow(LAI10))
+
+LAI1 <- pad_with_na(LAI1, max_rows)
+LAI2 <- pad_with_na(LAI2, max_rows)
+LAI3 <- pad_with_na(LAI3, max_rows)
+LAI4 <- pad_with_na(LAI4, max_rows)
+LAI5 <- pad_with_na(LAI5, max_rows)
+LAI6 <- pad_with_na(LAI6, max_rows)
+LAI7 <- pad_with_na(LAI7, max_rows)
+LAI8 <- pad_with_na(LAI8, max_rows)
+LAI9 <- pad_with_na(LAI9, max_rows)
+LAI10 <- pad_with_na(LAI10, max_rows)
+
+LAIbox <- cbind(LAI1,LAI2,LAI3,LAI4,LAI5,LAI6,LAI7,LAI8,LAI9,LAI10)
+
+LAIbox <- LAIbox %>%
+  pivot_longer(cols = 1:10, names_to = "LAI", values_to = "value")
+LAIbox$LAI <- factor(LAIbox$LAI, levels = 1:10)
+
+ggplot(LAIbox, aes(x = LAI, y = value)) +
+  geom_boxplot() +
+  theme_classic()
+
+```
+
+##################
+
+testLAI <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Harvest Testing/NECN/LAI-10.img")
+plot(testLAI)
+
+values(testLAI) %>% as.data.frame() %>%
+  filter(Layer_1 > 0) %>%
+  ggplot(., aes(y = Layer_1)) +
+  geom_boxplot() +
+  theme_classic()
+
+
+
+
+
+```{r}
+drainage01 <- rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Clipped Piedmont/Drainage_0.1.tif")
+plot(drainage01)
+drainage02 <-drainage01
+values(drainage02) <- values(drainage02 * 2)
+
+plot(drainage02)
+
+
+writeRaster(drainage02,
+            filename = "C:/Users/lagoodal/Desktop/Dissertation Stuff/Clipped Test/treeMap Resistance/Clipped Piedmont/Drainage_0.2.tif",
+            datatype = "FLT4S",
+            overwrite = TRUE,
+            NAflag = 0)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
