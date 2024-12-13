@@ -19,6 +19,12 @@ The Piedmont ecoregion in North Carolina is of particular interest due to it's h
 Researchers and managers need to forecast the potential futures of the forests they study and manage, how the different management techniques will produce different ecosystem service trade-offs and synergies, and how the delivery of these ecosystem services will vary with different drought based climactic futures. LANDIS-II is a spatially explicit, landscape dynamics model capable of simulating forested landscapes at larger spatial scales (Scheller et al. 2007) to capture cross scale processes.
 
 
+Thank you to our funding sources:
+
+![image](https://github.com/user-attachments/assets/2a75e8c3-8d16-4838-b655-5cb447902943)
+
+
+![](https://cnr.ncsu.edu/geospatial/wp-content/uploads/sites/22/2017/06/cgaBlack.png)
 
 
 References:
