@@ -1,1 +1,10 @@
-# InitialCommunities
+Initial Communities
+
+To assemble the initial communities for the project's landscape we chose to use TreeMap 2014 (Riley et al. 2021) as the start point. TreeMap is a spatial model of trees across the forests of the continental United States which produces a final product where each 30 x 30m cell of forest in the US is linked to a real life Forest Inventory & Analysis (FIA) plot visit using the PLT_CN identifier. Each cell has data on species composition, biomass, downed carbon content and a suite of others.
+
+The CONUS level TreeMap was cropped to our landscape and reprojected to UTM 17N (EPSG:26917) and then the composition of the landscape was assessed. Some PLT_CNs were from further afield and contained species not present in NC (e.g. Oregon and Douglas-fir) and we chose to limit PLT_CNs to have come from either NC, SC, TN, GA or VA. All species that made up less than 0.5% of the landscapew basal area were filtered out leaving 26 species.
+
+
+References:
+
+Riley, K.L., Grenfell, I.C., Finney, M.A. et al. TreeMap, a tree-level model of conterminous US forests circa 2014 produced by imputation of FIA plot data. Sci Data 8, 11 (2021). https://doi.org/10.1038/s41597-020-00782-x
