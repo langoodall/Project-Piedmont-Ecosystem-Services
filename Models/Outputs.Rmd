@@ -1,0 +1,2878 @@
+---
+title: "Untitled"
+output: pdf_document
+date: "2024-12-18"
+---
+
+```{r}
+library(tidyverse)
+library(terra)
+library(sf)
+options(scipen = 999)
+templateRaster <- rast("D:/Landis Outputs/Raster Template/templateRaster.tif")
+softwoods <- c("JUVI","PIEC2","PIPA2","PIST","PITA","PIVI2","TAAS","TADI2")
+oaks <- c("QUAL","QUCO2","QUFA","QULA3","QUNI","QUPH","QUPR2","QURU","QUST","QUVE")
+hardwoods <- c("ACRU","CAAL27","CAGL8","FAGR","FRAM2","FRPE","LIST2","LITU","NYBI","NYSY","OXAR","PRSE2")
+```
+
+
+# TRANSITION
+## RCP45
+### HSHV (BNU-ESM)
+
+```{r}
+#----Spp Biomass----#
+mainDir <- "D:/Landis Outputs/Transition/RCP45/HSHV"
+runs <- paste0("run", 1:5)
+combinedData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "spp-biomass-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData) %>%
+  select(-`...34`)
+
+
+# Composition through time
+sppBiomass_BNU_ESM_RCP45 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         RCP = "RCP45",
+         Model = "BNU-ESM_RCP45",
+         Prescription = "Transition")
+
+
+# Proportional composition
+propBiomass_BNU_ESM_RCP45 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", "")) %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(RCP = "RCP45",
+         Model = "BNU-ESM_RCP45",
+         Prescription = "Transition",
+         FunctionalGroup = ifelse(Species %in% softwoods, "Softwoods",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods")),
+         TotalBiomass = sum(Biomass_MG),
+         Biomass_Percent = (Biomass_MG / TotalBiomass) * 100)
+
+
+#----Harvesting Rates----#
+## Normal
+combinedData <- list()
+for (run in runs){
+  harvestDir <- file.path(mainDir, run, "Harvest")
+  filePath <- file.path(harvestDir, "biomass-harvest-summary-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData)
+
+finalTable[,c(1,2,3,38:67,69)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         Prescription = str_replace(Prescription, "\\s*\\([^)]*\\)", "")) %>%
+  group_by(Time, Prescription, ManagementArea, Species) %>%
+  summarise(mean = mean(Harvested_Biomass),
+            sd = sd(Harvested_Biomass)) %>%
+  ggplot(., aes(x = Time, y = mean, col = Species, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_grid(Prescription ~ ManagementArea) +
+  scale_y_continuous(name = "Biomass in Millions of Mg",
+                     breaks = c(0,1e6,2e6,3e6,4e6),
+                     labels = c(0,1,2,3,4))
+
+
+#----Climate----#
+# For loop to read in future climate data. Then organised into appropriate metrics
+climateData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "Climate-future-input-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  climateData[[run]] <- data
+}
+climateData <- do.call(rbind, climateData) %>%
+  select(-`...28`)
+BNU_ESM_RCP45 <- climateData[,c(1,2,5,6,7,28)] %>%
+  mutate(mean_airtemp = (min_airtemp + max_airtemp) / 2) %>%
+  group_by(Year) %>%
+  summarise(meanppt = mean(ppt),
+            sumppt = sum(ppt),
+            airtemp = mean(mean_airtemp)) %>%
+  mutate(Model = "BNU-ESM_RCP45")
+
+#----Annual Water Budget----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("Annual-water-budget-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)                                        # Flip added because it was coming out upside down
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)  # Convert to .tif file
+    combinedRasters[[newFileName]] <- rasterData
+    print(paste("Successfully read:", newFileName))
+  }
+}
+AWB10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+AWB20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+AWB30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+AWB40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+AWB50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+AWB60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+AWB70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+AWB80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+AWBStack_BNU_ESM_RCP45 <- c(AWB10,AWB20,AWB30,AWB40,AWB50,AWB60,AWB70,AWB80)
+plot(AWBStack_BNU_ESM_RCP45)
+AWBStack_BNU_ESM_RCP45Df <- AWBStack_BNU_ESM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "AWB") %>%
+  group_by(Time) %>%
+  summarise(AWB = mean(AWB)) %>%
+  mutate(Model = "BNU-ESM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Net Primary Productivity----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("AG_NPP-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+NPP10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+NPP20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+NPP30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+NPP40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+NPP50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+NPP60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+NPP70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+NPP80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+NPPStack_BNU_ESM_RCP45 <- c(NPP10,NPP20,NPP30,NPP40,NPP50,NPP60,NPP70,NPP80)
+plot(NPPStack_BNU_ESM_RCP45)
+NPPStack_BNU_ESM_RCP45Df <- NPPStack_BNU_ESM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "NPP") %>%
+  group_by(Time) %>%
+  summarise(NPP = mean(NPP)) %>%
+  mutate(Model = "BNU-ESM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Net Ecosystem Exchange----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("ANEE-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+ANEE10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+ANEE20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+ANEE30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+ANEE40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+ANEE50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+ANEE60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+ANEE70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+ANEE80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+ANEEStack_BNU_ESM_RCP45 <- c(ANEE10,ANEE20,ANEE30,ANEE40,ANEE50,ANEE60,ANEE70,ANEE80)
+plot(ANEEStack_BNU_ESM_RCP45)
+ANEEStack_BNU_ESM_RCP45Df <- ANEEStack_BNU_ESM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "ANEE") %>%
+  group_by(Time) %>%
+  summarise(ANEE = mean(ANEE)) %>%
+  mutate(Model = "BNU-ESM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Total Carbon----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("TotalC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+TotalC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+TotalC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+TotalC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+TotalC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+TotalC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+TotalC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+TotalC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+TotalC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+TotalCStack_BNU_ESM_RCP45 <- c(TotalC10,TotalC20,TotalC30,TotalC40,TotalC50,TotalC60,TotalC70,TotalC80)
+plot(TotalCStack_BNU_ESM_RCP45)
+TotalCStack_BNU_ESM_RCP45Df <- TotalCStack_BNU_ESM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "TotalC") %>%
+  group_by(Time) %>%
+  summarise(TotalC = mean(TotalC)) %>%
+  mutate(Model = "BNU-ESM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Soil Nitrogen----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SoilN-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SoilN10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SoilN20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SoilN30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SoilN40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SoilN50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SoilN60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SoilN70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SoilN80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SoilNStack_BNU_ESM_RCP45 <- c(SoilN10,SoilN20,SoilN30,SoilN40,SoilN50,SoilN60,SoilN70,SoilN80)
+plot(SoilNStack_BNU_ESM_RCP45)
+SoilNStack_BNU_ESM_RCP45Df <- SoilNStack_BNU_ESM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SoilN") %>%
+  group_by(Time) %>%
+  summarise(SoilN = mean(SoilN)) %>%
+  mutate(Model = "BNU-ESM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----SOMTC----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SOMTC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SOMTC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SOMTC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SOMTC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SOMTC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SOMTC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SOMTC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SOMTC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SOMTC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SOMTCStack_BNU_ESM_RCP45 <- c(SOMTC10,SOMTC20,SOMTC30,SOMTC40,SOMTC50,SOMTC60,SOMTC70,SOMTC80)
+plot(SOMTCStack_BNU_ESM_RCP45)
+SOMTCStack_BNU_ESM_RCP45Df <- SOMTCStack_BNU_ESM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SOMTC") %>%
+  group_by(Time) %>%
+  summarise(SOMTC = mean(SOMTC)) %>%
+  mutate(Model = "BNU-ESM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+```
+
+### HSLV (MIROC-ESM-CHEM)
+
+```{r}
+# Spp Biomass
+mainDir <- "D:/Landis Outputs/Transition/RCP45/HSLV"
+runs <- paste0("run", 1:5)
+combinedData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "spp-biomass-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData) %>%
+  select(-`...34`)
+
+# Composition through time
+sppBiomass_MIROC_ESM_CHEM_RCP45 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         RCP = "RCP45",
+         Model = "MIROC-ESM-CHEM_RCP45",
+         Prescription = "Transition")
+
+# Proportional composition
+propBiomass_MIROC_ESM_CHEM_RCP45 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", "")) %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(RCP = "RCP45",
+         Model = "MIROC-ESM-CHEM_RCP45",
+         Prescription = "Transition",
+         FunctionalGroup = ifelse(Species %in% softwoods, "Softwoods",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods")),
+         TotalBiomass = sum(Biomass_MG),
+         Biomass_Percent = (Biomass_MG / TotalBiomass) * 100)
+
+
+# Harvesting Rates
+## Normal
+combinedData <- list()
+for (run in runs){
+  harvestDir <- file.path(mainDir, run, "Harvest")
+  filePath <- file.path(harvestDir, "biomass-harvest-summary-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData)
+
+finalTable[,c(1,2,3,38:67,69)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         Prescription = str_replace(Prescription, "\\s*\\([^)]*\\)", "")) %>%
+  group_by(Time, Prescription, ManagementArea, Species) %>%
+  summarise(mean = mean(Harvested_Biomass),
+            sd = sd(Harvested_Biomass)) %>%
+  ggplot(., aes(x = Time, y = mean, col = Species, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_grid(Prescription ~ ManagementArea) +
+  scale_y_continuous(name = "Biomass in Millions of Mg",
+                     breaks = c(0,1e6,2e6,3e6,4e6),
+                     labels = c(0,1,2,3,4))
+
+
+# Climate
+climateData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "Climate-future-input-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  climateData[[run]] <- data
+}
+climateData <- do.call(rbind, climateData) %>%
+  select(-`...28`)
+MIROC_ESM_CHEM_RCP45 <- climateData[,c(1,2,5,6,7,28)] %>%
+  mutate(mean_airtemp = (min_airtemp + max_airtemp) / 2) %>%
+  group_by(Year) %>%
+  summarise(meanppt = mean(ppt),
+            sumppt = sum(ppt),
+            airtemp = mean(mean_airtemp)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP45")
+
+# Annual Water Budget
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("Annual-water-budget-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)                                        # Flip added because it was coming out upside down
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)  # Convert to .tif file
+    combinedRasters[[newFileName]] <- rasterData
+    print(paste("Successfully read:", newFileName))
+  }
+}
+
+AWB10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+AWB20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+AWB30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+AWB40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+AWB50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+AWB60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+AWB70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+AWB80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+AWBStack_MIROC_ESM_CHEM_RCP45 <- c(AWB10,AWB20,AWB30,AWB40,AWB50,AWB60,AWB70,AWB80)
+plot(AWBStack_MIROC_ESM_CHEM_RCP45)
+
+
+AWBStack_MIROC_ESM_CHEM_RCP45Df <- AWBStack_MIROC_ESM_CHEM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "AWB") %>%
+  group_by(Time) %>%
+  summarise(AWB = mean(AWB)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+# Net Primary Productivity
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("AG_NPP-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+
+NPP10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+NPP20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+NPP30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+NPP40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+NPP50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+NPP60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+NPP70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+NPP80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+NPPStack_MIROC_ESM_CHEM_RCP45 <- c(NPP10,NPP20,NPP30,NPP40,NPP50,NPP60,NPP70,NPP80)
+plot(NPPStack_MIROC_ESM_CHEM_RCP45)
+NPPStack_MIROC_ESM_CHEM_RCP45Df <- NPPStack_MIROC_ESM_CHEM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "NPP") %>%
+  group_by(Time) %>%
+  summarise(NPP = mean(NPP)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Net Ecosystem Exchange----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("ANEE-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+ANEE10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+ANEE20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+ANEE30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+ANEE40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+ANEE50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+ANEE60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+ANEE70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+ANEE80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+ANEEStack_MIROC_ESM_CHEM_RCP45 <- c(ANEE10,ANEE20,ANEE30,ANEE40,ANEE50,ANEE60,ANEE70,ANEE80)
+plot(ANEEStack_MIROC_ESM_CHEM_RCP45)
+ANEEStack_MIROC_ESM_CHEM_RCP45Df <- ANEEStack_MIROC_ESM_CHEM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "ANEE") %>%
+  group_by(Time) %>%
+  summarise(ANEE = mean(ANEE)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Total Carbon----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("TotalC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+TotalC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+TotalC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+TotalC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+TotalC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+TotalC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+TotalC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+TotalC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+TotalC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+TotalCStack_MIROC_ESM_CHEM_RCP45 <- c(TotalC10,TotalC20,TotalC30,TotalC40,TotalC50,TotalC60,TotalC70,TotalC80)
+plot(TotalCStack_MIROC_ESM_CHEM_RCP45)
+TotalCStack_MIROC_ESM_CHEM_RCP45Df <- TotalCStack_MIROC_ESM_CHEM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "TotalC") %>%
+  group_by(Time) %>%
+  summarise(TotalC = mean(TotalC)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Soil Nitrogen----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SoilN-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SoilN10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SoilN20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SoilN30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SoilN40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SoilN50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SoilN60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SoilN70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SoilN80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SoilNStack_MIROC_ESM_CHEM_RCP45 <- c(SoilN10,SoilN20,SoilN30,SoilN40,SoilN50,SoilN60,SoilN70,SoilN80)
+plot(SoilNStack_MIROC_ESM_CHEM_RCP45)
+SoilNStack_MIROC_ESM_CHEM_RCP45Df <- SoilNStack_MIROC_ESM_CHEM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SoilN") %>%
+  group_by(Time) %>%
+  summarise(SoilN = mean(SoilN)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----SOMTC----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SOMTC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SOMTC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SOMTC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SOMTC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SOMTC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SOMTC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SOMTC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SOMTC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SOMTC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SOMTCStack_MIROC_ESM_CHEM_RCP45 <- c(SOMTC10,SOMTC20,SOMTC30,SOMTC40,SOMTC50,SOMTC60,SOMTC70,SOMTC80)
+plot(SOMTCStack_MIROC_ESM_CHEM_RCP45)
+SOMTCStack_MIROC_ESM_CHEM_RCP45Df <- SOMTCStack_MIROC_ESM_CHEM_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SOMTC") %>%
+  group_by(Time) %>%
+  summarise(SOMTC = mean(SOMTC)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+```
+
+### LSHV (MRI-CGCM3)
+
+```{r}
+# Spp Biomass
+mainDir <- "D:/Landis Outputs/Transition/RCP45/LSHV"
+runs <- paste0("run", 1:5)
+combinedData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "spp-biomass-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData) %>%
+  select(-`...34`)
+
+# Composition through time
+sppBiomass_MRI_CGCM3_RCP45 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         RCP = "RCP45",
+         Model = "MRI-CGCM3_RCP45",
+         Prescription = "Transition")
+
+# Proportional composition
+propBiomass_MRI_CGCM3_RCP45 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", "")) %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(RCP = "RCP45",
+         Model = "MRI-CGCM3_RCP45",
+         Prescription = "Transition",
+         FunctionalGroup = ifelse(Species %in% softwoods, "Softwoods",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods")),
+         TotalBiomass = sum(Biomass_MG),
+         Biomass_Percent = (Biomass_MG / TotalBiomass) * 100)
+
+# Harvesting Rates
+## Normal
+combinedData <- list()
+for (run in runs){
+  harvestDir <- file.path(mainDir, run, "Harvest")
+  filePath <- file.path(harvestDir, "biomass-harvest-summary-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData)
+
+finalTable[,c(1,2,3,38:67,69)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         Prescription = str_replace(Prescription, "\\s*\\([^)]*\\)", "")) %>%
+  group_by(Time, Prescription, ManagementArea, Species) %>%
+  summarise(mean = mean(Harvested_Biomass),
+            sd = sd(Harvested_Biomass)) %>%
+  ggplot(., aes(x = Time, y = mean, col = Species, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_grid(Prescription ~ ManagementArea) +
+  scale_y_continuous(name = "Biomass in Millions of Mg",
+                     breaks = c(0,1e6,2e6,3e6,4e6),
+                     labels = c(0,1,2,3,4))
+
+
+# Climate
+climateData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "Climate-future-input-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  climateData[[run]] <- data
+}
+climateData <- do.call(rbind, climateData) %>%
+  select(-`...28`)
+
+
+MRI_CGCM3_RCP45 <- climateData[,c(1,2,5,6,7,28)] %>%
+  mutate(mean_airtemp = (min_airtemp + max_airtemp) / 2) %>%
+  group_by(Year) %>%
+  summarise(meanppt = mean(ppt),
+            sumppt = sum(ppt),
+            airtemp = mean(mean_airtemp)) %>%
+  mutate(Model = "MRI-CGCM3_RCP45")
+
+
+
+# Annual Water Budget
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("Annual-water-budget-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)                                        # Flip added because it was coming out upside down
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)  # Convert to .tif file
+    combinedRasters[[newFileName]] <- rasterData
+    print(paste("Successfully read:", newFileName))
+  }
+}
+
+AWB10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+AWB20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+AWB30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+AWB40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+AWB50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+AWB60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+AWB70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+AWB80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+AWBStack_MRI_CGCM3_RCP45 <- c(AWB10,AWB20,AWB30,AWB40,AWB50,AWB60,AWB70,AWB80)
+plot(AWBStack_MRI_CGCM3_RCP45)
+
+
+AWBStack_MRI_CGCM3_RCP45Df <- AWBStack_MRI_CGCM3_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "AWB") %>%
+  group_by(Time) %>%
+  summarise(AWB = mean(AWB)) %>%
+  mutate(Model = "MRI_CGCM3_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+# Net Primary Productivity
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("AG_NPP-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+
+NPP10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+NPP20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+NPP30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+NPP40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+NPP50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+NPP60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+NPP70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+NPP80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+NPPStack_MRI_CGCM3_RCP45 <- c(NPP10,NPP20,NPP30,NPP40,NPP50,NPP60,NPP70,NPP80)
+plot(NPPStack_MRI_CGCM3_RCP45)
+NPPStack_MRI_CGCM3_RCP45Df <- NPPStack_MRI_CGCM3_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "NPP") %>%
+  group_by(Time) %>%
+  summarise(NPP = mean(NPP)) %>%
+  mutate(Model = "MRI-CGCM3_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Net Ecosystem Exchange----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("ANEE-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+ANEE10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+ANEE20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+ANEE30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+ANEE40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+ANEE50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+ANEE60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+ANEE70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+ANEE80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+ANEEStack_MRI_CGCM3_RCP45 <- c(ANEE10,ANEE20,ANEE30,ANEE40,ANEE50,ANEE60,ANEE70,ANEE80)
+plot(ANEEStack_MRI_CGCM3_RCP45)
+ANEEStack_MRI_CGCM3_RCP45Df <- ANEEStack_MRI_CGCM3_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "ANEE") %>%
+  group_by(Time) %>%
+  summarise(ANEE = mean(ANEE)) %>%
+  mutate(Model = "MRI-CGCM3_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Total Carbon----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("TotalC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+TotalC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+TotalC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+TotalC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+TotalC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+TotalC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+TotalC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+TotalC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+TotalC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+TotalCStack_MRI_CGCM3_RCP45 <- c(TotalC10,TotalC20,TotalC30,TotalC40,TotalC50,TotalC60,TotalC70,TotalC80)
+plot(TotalCStack_MRI_CGCM3_RCP45)
+TotalCStack_MRI_CGCM3_RCP45Df <- TotalCStack_MRI_CGCM3_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "TotalC") %>%
+  group_by(Time) %>%
+  summarise(TotalC = mean(TotalC)) %>%
+  mutate(Model = "MRI-CGCM3_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Soil Nitrogen----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SoilN-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SoilN10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SoilN20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SoilN30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SoilN40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SoilN50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SoilN60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SoilN70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SoilN80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SoilNStack_MRI_CGCM3_RCP45 <- c(SoilN10,SoilN20,SoilN30,SoilN40,SoilN50,SoilN60,SoilN70,SoilN80)
+plot(SoilNStack_MRI_CGCM3_RCP45)
+SoilNStack_MRI_CGCM3_RCP45Df <- SoilNStack_MRI_CGCM3_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SoilN") %>%
+  group_by(Time) %>%
+  summarise(SoilN = mean(SoilN)) %>%
+  mutate(Model = "MRI-CGCM3_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----SOMTC----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SOMTC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SOMTC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SOMTC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SOMTC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SOMTC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SOMTC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SOMTC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SOMTC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SOMTC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SOMTCStack_MRI_CGCM3_RCP45 <- c(SOMTC10,SOMTC20,SOMTC30,SOMTC40,SOMTC50,SOMTC60,SOMTC70,SOMTC80)
+plot(SOMTCStack_MRI_CGCM3_RCP45)
+SOMTCStack_MRI_CGCM3_RCP45Df <- SOMTCStack_MRI_CGCM3_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SOMTC") %>%
+  group_by(Time) %>%
+  summarise(SOMTC = mean(SOMTC)) %>%
+  mutate(Model = "MRI-CGCM3_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+```
+
+### LSLV (CCSM4)
+
+```{r}
+# Spp Biomass
+mainDir <- "D:/Landis Outputs/Transition/RCP45/LSLV"
+runs <- paste0("run", 1:5)
+combinedData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "spp-biomass-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData) %>%
+  select(-`...34`)
+
+# Composition through time
+sppBiomass_CCSM4_RCP45 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         RCP = "RCP45",
+         Model = "CCSM4_RCP45",
+         Prescription = "Transition")
+
+# Proportional composition
+propBiomass_CCSM4_RCP45 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", "")) %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(RCP = "RCP45",
+         Model = "CCSM4_RCP45",
+         Prescription = "Transition",
+         FunctionalGroup = ifelse(Species %in% softwoods, "Softwoods",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods")),
+         TotalBiomass = sum(Biomass_MG),
+         Biomass_Percent = (Biomass_MG / TotalBiomass) * 100)
+
+# Harvesting Rates
+## Normal
+combinedData <- list()
+for (run in runs){
+  harvestDir <- file.path(mainDir, run, "Harvest")
+  filePath <- file.path(harvestDir, "biomass-harvest-summary-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData)
+
+finalTable[,c(1,2,3,38:67,69)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         Prescription = str_replace(Prescription, "\\s*\\([^)]*\\)", "")) %>%
+  group_by(Time, Prescription, ManagementArea, Species) %>%
+  summarise(mean = mean(Harvested_Biomass),
+            sd = sd(Harvested_Biomass)) %>%
+  ggplot(., aes(x = Time, y = mean, col = Species, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_grid(Prescription ~ ManagementArea) +
+  scale_y_continuous(name = "Biomass in Millions of Mg",
+                     breaks = c(0,1e6,2e6,3e6,4e6),
+                     labels = c(0,1,2,3,4))
+
+
+# Climate
+climateData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "Climate-future-input-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  climateData[[run]] <- data
+}
+climateData <- do.call(rbind, climateData) %>%
+  select(-`...28`)
+
+
+CCSM4_RCP45 <- climateData[,c(1,2,5,6,7,28)] %>%
+  mutate(mean_airtemp = (min_airtemp + max_airtemp) / 2) %>%
+  group_by(Year) %>%
+  summarise(meanppt = mean(ppt),
+            sumppt = sum(ppt),
+            airtemp = mean(mean_airtemp)) %>%
+  mutate(Model = "CCSM4_RCP45")
+
+
+
+# Annual Water Budget
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("Annual-water-budget-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)                                        # Flip added because it was coming out upside down
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)  # Convert to .tif file
+    combinedRasters[[newFileName]] <- rasterData
+    print(paste("Successfully read:", newFileName))
+  }
+}
+
+AWB10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+AWB20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+AWB30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+AWB40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+AWB50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+AWB60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+AWB70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+AWB80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+AWBStack_CCSM4_RCP45 <- c(AWB10,AWB20,AWB30,AWB40,AWB50,AWB60,AWB70,AWB80)
+plot(AWBStack_CCSM4_RCP45)
+
+
+AWBStack_CCSM4_RCP45Df <- AWBStack_CCSM4_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "AWB") %>%
+  group_by(Time) %>%
+  summarise(AWB = mean(AWB)) %>%
+  mutate(Model = "CCSM4_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+# Net Primary Productivity
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("AG_NPP-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+
+NPP10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+NPP20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+NPP30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+NPP40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+NPP50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+NPP60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+NPP70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+NPP80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+NPPStack_CCSM4_RCP45 <- c(NPP10,NPP20,NPP30,NPP40,NPP50,NPP60,NPP70,NPP80)
+plot(NPPStack_CCSM4_RCP45)
+NPPStack_CCSM4_RCP45Df <- NPPStack_CCSM4_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "NPP") %>%
+  group_by(Time) %>%
+  summarise(NPP = mean(NPP)) %>%
+  mutate(Model = "CCSM4_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Net Ecosystem Exchange----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("ANEE-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+ANEE10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+ANEE20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+ANEE30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+ANEE40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+ANEE50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+ANEE60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+ANEE70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+ANEE80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+ANEEStack_CCSM4_RCP45 <- c(ANEE10,ANEE20,ANEE30,ANEE40,ANEE50,ANEE60,ANEE70,ANEE80)
+plot(ANEEStack_CCSM4_RCP45)
+ANEEStack_CCSM4_RCP45Df <- ANEEStack_CCSM4_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "ANEE") %>%
+  group_by(Time) %>%
+  summarise(ANEE = mean(ANEE)) %>%
+  mutate(Model = "CCSM4_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Total Carbon----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("TotalC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+TotalC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+TotalC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+TotalC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+TotalC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+TotalC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+TotalC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+TotalC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+TotalC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+TotalCStack_CCSM4_RCP45 <- c(TotalC10,TotalC20,TotalC30,TotalC40,TotalC50,TotalC60,TotalC70,TotalC80)
+plot(TotalCStack_CCSM4_RCP45)
+TotalCStack_CCSM4_RCP45Df <- TotalCStack_CCSM4_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "TotalC") %>%
+  group_by(Time) %>%
+  summarise(TotalC = mean(TotalC)) %>%
+  mutate(Model = "CCSM4_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----Soil Nitrogen----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SoilN-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SoilN10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SoilN20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SoilN30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SoilN40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SoilN50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SoilN60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SoilN70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SoilN80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SoilNStack_CCSM4_RCP45 <- c(SoilN10,SoilN20,SoilN30,SoilN40,SoilN50,SoilN60,SoilN70,SoilN80)
+plot(SoilNStack_CCSM4_RCP45)
+SoilNStack_CCSM4_RCP45Df <- SoilNStack_CCSM4_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SoilN") %>%
+  group_by(Time) %>%
+  summarise(SoilN = mean(SoilN)) %>%
+  mutate(Model = "CCSM4_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+#----SOMTC----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SOMTC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SOMTC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SOMTC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SOMTC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SOMTC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SOMTC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SOMTC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SOMTC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SOMTC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SOMTCStack_CCSM4_RCP45 <- c(SOMTC10,SOMTC20,SOMTC30,SOMTC40,SOMTC50,SOMTC60,SOMTC70,SOMTC80)
+plot(SOMTCStack_CCSM4_RCP45)
+SOMTCStack_CCSM4_RCP45Df <- SOMTCStack_CCSM4_RCP45 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SOMTC") %>%
+  group_by(Time) %>%
+  summarise(SOMTC = mean(SOMTC)) %>%
+  mutate(Model = "CCSM4_RCP45",
+         RCP = "RCP45",
+         Prescription = "Transition")
+
+```
+
+
+## RCP85
+### HSHV (BNU-ESM)
+
+```{r}
+# Spp Biomass
+mainDir <- "D:/Landis Outputs/Transition/RCP85/HSHV"
+runs <- paste0("run", 1:5)
+combinedData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "spp-biomass-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData) %>%
+  select(-`...34`)
+
+# Composition through time
+sppBiomass_BNU_ESM_RCP85 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         RCP = "RCP85",
+         Model = "BNU-ESM_RCP85",
+         Prescription = "Transition")
+
+# Proportional composition
+propBiomass_BNU_ESM_RCP85 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", "")) %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(RCP = "RCP85",
+         Model = "BNU-ESM_RCP85",
+         Prescription = "Transition",
+         FunctionalGroup = ifelse(Species %in% softwoods, "Softwoods",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods")),
+         TotalBiomass = sum(Biomass_MG),
+         Biomass_Percent = (Biomass_MG / TotalBiomass) * 100)
+
+# Harvesting Rates
+## Normal
+combinedData <- list()
+for (run in runs){
+  harvestDir <- file.path(mainDir, run, "Harvest")
+  filePath <- file.path(harvestDir, "biomass-harvest-summary-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData)
+
+finalTable[,c(1,2,3,38:67,69)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         Prescription = str_replace(Prescription, "\\s*\\([^)]*\\)", "")) %>%
+  group_by(Time, Prescription, ManagementArea, Species) %>%
+  summarise(mean = mean(Harvested_Biomass),
+            sd = sd(Harvested_Biomass)) %>%
+  ggplot(., aes(x = Time, y = mean, col = Species, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_grid(Prescription ~ ManagementArea) +
+  scale_y_continuous(name = "Biomass in Millions of Mg",
+                     breaks = c(0,1e6,2e6,3e6,4e6),
+                     labels = c(0,1,2,3,4))
+
+
+# Climate
+climateData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "Climate-future-input-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  climateData[[run]] <- data
+}
+climateData <- do.call(rbind, climateData) %>%
+  select(-`...28`)
+
+
+BNU_ESM_RCP85 <- climateData[,c(1,2,5,6,7,28)] %>%
+  mutate(mean_airtemp = (min_airtemp + max_airtemp) / 2) %>%
+  group_by(Year) %>%
+  summarise(meanppt = mean(ppt),
+            sumppt = sum(ppt),
+            airtemp = mean(mean_airtemp)) %>%
+  mutate(Model = "BNU-ESM_RCP85")
+
+
+
+# Annual Water Budget
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("Annual-water-budget-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)                                        # Flip added because it was coming out upside down
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)  # Convert to .tif file
+    combinedRasters[[newFileName]] <- rasterData
+    print(paste("Successfully read:", newFileName))
+  }
+}
+
+AWB10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+AWB20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+AWB30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+AWB40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+AWB50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+AWB60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+AWB70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+AWB80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+AWBStack_BNU_ESM_RCP85 <- c(AWB10,AWB20,AWB30,AWB40,AWB50,AWB60,AWB70,AWB80)
+plot(AWBStack_BNU_ESM_RCP85)
+
+
+AWBStack_BNU_ESM_RCP85Df <- AWBStack_BNU_ESM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "AWB") %>%
+  group_by(Time) %>%
+  summarise(AWB = mean(AWB)) %>%
+  mutate(Model = "BNU-ESM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+# Net Primary Productivity
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("AG_NPP-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+
+NPP10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+NPP20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+NPP30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+NPP40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+NPP50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+NPP60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+NPP70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+NPP80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+NPPStack_BNU_ESM_RCP85 <- c(NPP10,NPP20,NPP30,NPP40,NPP50,NPP60,NPP70,NPP80)
+plot(NPPStack_BNU_ESM_RCP85)
+NPPStack_BNU_ESM_RCP85Df <- NPPStack_BNU_ESM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "NPP") %>%
+  group_by(Time) %>%
+  summarise(NPP = mean(NPP)) %>%
+  mutate(Model = "BNU-ESM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Net Ecosystem Exchange----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("ANEE-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+ANEE10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+ANEE20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+ANEE30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+ANEE40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+ANEE50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+ANEE60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+ANEE70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+ANEE80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+ANEEStack_BNU_ESM_RCP85 <- c(ANEE10,ANEE20,ANEE30,ANEE40,ANEE50,ANEE60,ANEE70,ANEE80)
+plot(ANEEStack_BNU_ESM_RCP85)
+ANEEStack_BNU_ESM_RCP85Df <- ANEEStack_BNU_ESM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "ANEE") %>%
+  group_by(Time) %>%
+  summarise(ANEE = mean(ANEE)) %>%
+  mutate(Model = "BNU-ESM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Total Carbon----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("TotalC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+TotalC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+TotalC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+TotalC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+TotalC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+TotalC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+TotalC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+TotalC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+TotalC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+TotalCStack_BNU_ESM_RCP85 <- c(TotalC10,TotalC20,TotalC30,TotalC40,TotalC50,TotalC60,TotalC70,TotalC80)
+plot(TotalCStack_BNU_ESM_RCP85)
+TotalCStack_BNU_ESM_RCP85Df <- TotalCStack_BNU_ESM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "TotalC") %>%
+  group_by(Time) %>%
+  summarise(TotalC = mean(TotalC)) %>%
+  mutate(Model = "BNU-ESM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Soil Nitrogen----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SoilN-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SoilN10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SoilN20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SoilN30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SoilN40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SoilN50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SoilN60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SoilN70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SoilN80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SoilNStack_BNU_ESM_RCP85 <- c(SoilN10,SoilN20,SoilN30,SoilN40,SoilN50,SoilN60,SoilN70,SoilN80)
+plot(SoilNStack_BNU_ESM_RCP85)
+SoilNStack_BNU_ESM_RCP85Df <- SoilNStack_BNU_ESM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SoilN") %>%
+  group_by(Time) %>%
+  summarise(SoilN = mean(SoilN)) %>%
+  mutate(Model = "BNU-ESM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----SOMTC----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SOMTC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SOMTC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SOMTC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SOMTC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SOMTC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SOMTC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SOMTC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SOMTC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SOMTC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SOMTCStack_BNU_ESM_RCP85 <- c(SOMTC10,SOMTC20,SOMTC30,SOMTC40,SOMTC50,SOMTC60,SOMTC70,SOMTC80)
+plot(SOMTCStack_BNU_ESM_RCP85)
+SOMTCStack_BNU_ESM_RCP85Df <- SOMTCStack_BNU_ESM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SOMTC") %>%
+  group_by(Time) %>%
+  summarise(SOMTC = mean(SOMTC)) %>%
+  mutate(Model = "BNU-ESM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+```
+
+### HSLV (MIROC-ESM-CHEM)
+
+```{r}
+# Spp Biomass
+mainDir <- "D:/Landis Outputs/Transition/RCP85/HSLV"
+runs <- paste0("run", 1:5)
+combinedData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "spp-biomass-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData) %>%
+  select(-`...34`)
+
+# Composition through time
+sppBiomass_MIROC_ESM_CHEM_RCP85 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         RCP = "RCP85",
+         Model = "MIROC-ESM-CHEM_RCP85",
+         Prescription = "Transition")
+
+# Proportional composition
+propBiomass_MIROC_ESM_CHEM_RCP85 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", "")) %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(RCP = "RCP85",
+         Model = "MIROC-ESM-CHEM_RCP85",
+         Prescription = "Transition",
+         FunctionalGroup = ifelse(Species %in% softwoods, "Softwoods",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods")),
+         TotalBiomass = sum(Biomass_MG),
+         Biomass_Percent = (Biomass_MG / TotalBiomass) * 100)
+
+# Harvesting Rates
+## Normal
+combinedData <- list()
+for (run in runs){
+  harvestDir <- file.path(mainDir, run, "Harvest")
+  filePath <- file.path(harvestDir, "biomass-harvest-summary-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData)
+
+finalTable[,c(1,2,3,38:67,69)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         Prescription = str_replace(Prescription, "\\s*\\([^)]*\\)", "")) %>%
+  group_by(Time, Prescription, ManagementArea, Species) %>%
+  summarise(mean = mean(Harvested_Biomass),
+            sd = sd(Harvested_Biomass)) %>%
+  ggplot(., aes(x = Time, y = mean, col = Species, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_grid(Prescription ~ ManagementArea) +
+  scale_y_continuous(name = "Biomass in Millions of Mg",
+                     breaks = c(0,1e6,2e6,3e6,4e6),
+                     labels = c(0,1,2,3,4))
+
+
+# Climate
+climateData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "Climate-future-input-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  climateData[[run]] <- data
+}
+climateData <- do.call(rbind, climateData) %>%
+  select(-`...28`)
+
+
+MIROC_ESM_CHEM_RCP85 <- climateData[,c(1,2,5,6,7,28)] %>%
+  mutate(mean_airtemp = (min_airtemp + max_airtemp) / 2) %>%
+  group_by(Year) %>%
+  summarise(meanppt = mean(ppt),
+            sumppt = sum(ppt),
+            airtemp = mean(mean_airtemp)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP85")
+
+
+# Annual Water Budget
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("Annual-water-budget-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)                                        # Flip added because it was coming out upside down
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)  # Convert to .tif file
+    combinedRasters[[newFileName]] <- rasterData
+    print(paste("Successfully read:", newFileName))
+  }
+}
+
+AWB10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+AWB20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+AWB30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+AWB40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+AWB50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+AWB60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+AWB70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+AWB80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+AWBStack_MIROC_ESM_CHEM_RCP85 <- c(AWB10,AWB20,AWB30,AWB40,AWB50,AWB60,AWB70,AWB80)
+plot(AWBStack_MIROC_ESM_CHEM_RCP85)
+
+
+AWBStack_MIROC_ESM_CHEM_RCP85Df <- AWBStack_MIROC_ESM_CHEM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "AWB") %>%
+  group_by(Time) %>%
+  summarise(AWB = mean(AWB)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+# Net Primary Productivity
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("AG_NPP-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+
+NPP10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+NPP20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+NPP30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+NPP40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+NPP50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+NPP60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+NPP70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+NPP80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+NPPStack_MIROC_ESM_CHEM_RCP85 <- c(NPP10,NPP20,NPP30,NPP40,NPP50,NPP60,NPP70,NPP80)
+plot(NPPStack_MIROC_ESM_CHEM_RCP85)
+NPPStack_MIROC_ESM_CHEM_RCP85Df <- NPPStack_MIROC_ESM_CHEM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "NPP") %>%
+  group_by(Time) %>%
+  summarise(NPP = mean(NPP)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Net Ecosystem Exchange----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("ANEE-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+ANEE10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+ANEE20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+ANEE30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+ANEE40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+ANEE50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+ANEE60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+ANEE70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+ANEE80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+ANEEStack_MIROC_ESM_CHEM_RCP85 <- c(ANEE10,ANEE20,ANEE30,ANEE40,ANEE50,ANEE60,ANEE70,ANEE80)
+plot(ANEEStack_MIROC_ESM_CHEM_RCP85)
+ANEEStack_MIROC_ESM_CHEM_RCP85Df <- ANEEStack_MIROC_ESM_CHEM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "ANEE") %>%
+  group_by(Time) %>%
+  summarise(ANEE = mean(ANEE)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Total Carbon----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("TotalC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+TotalC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+TotalC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+TotalC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+TotalC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+TotalC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+TotalC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+TotalC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+TotalC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+TotalCStack_MIROC_ESM_CHEM_RCP85 <- c(TotalC10,TotalC20,TotalC30,TotalC40,TotalC50,TotalC60,TotalC70,TotalC80)
+plot(TotalCStack_MIROC_ESM_CHEM_RCP85)
+TotalCStack_MIROC_ESM_CHEM_RCP85Df <- TotalCStack_MIROC_ESM_CHEM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "TotalC") %>%
+  group_by(Time) %>%
+  summarise(TotalC = mean(TotalC)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Soil Nitrogen----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SoilN-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SoilN10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SoilN20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SoilN30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SoilN40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SoilN50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SoilN60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SoilN70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SoilN80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SoilNStack_MIROC_ESM_CHEM_RCP85 <- c(SoilN10,SoilN20,SoilN30,SoilN40,SoilN50,SoilN60,SoilN70,SoilN80)
+plot(SoilNStack_MIROC_ESM_CHEM_RCP85)
+SoilNStack_MIROC_ESM_CHEM_RCP85Df <- SoilNStack_MIROC_ESM_CHEM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SoilN") %>%
+  group_by(Time) %>%
+  summarise(SoilN = mean(SoilN)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----SOMTC----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SOMTC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SOMTC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SOMTC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SOMTC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SOMTC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SOMTC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SOMTC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SOMTC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SOMTC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SOMTCStack_MIROC_ESM_CHEM_RCP85 <- c(SOMTC10,SOMTC20,SOMTC30,SOMTC40,SOMTC50,SOMTC60,SOMTC70,SOMTC80)
+plot(SOMTCStack_MIROC_ESM_CHEM_RCP85)
+SOMTCStack_MIROC_ESM_CHEM_RCP85Df <- SOMTCStack_MIROC_ESM_CHEM_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SOMTC") %>%
+  group_by(Time) %>%
+  summarise(SOMTC = mean(SOMTC)) %>%
+  mutate(Model = "MIROC-ESM-CHEM_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+```
+
+### LSHV (MRI-CGCM3)
+
+```{r}
+# Spp Biomass
+mainDir <- "D:/Landis Outputs/Transition/RCP85/LSHV"
+runs <- paste0("run", 1:5)
+combinedData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "spp-biomass-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData) %>%
+  select(-`...34`)
+
+# Composition through time
+sppBiomass_MRI_CGCM3_RCP85 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         RCP = "RCP85",
+         Model = "MRI-CGCM3_RCP85",
+         Prescription = "Transition")
+
+# Proportional composition
+propBiomass_MRI_CGCM3_RCP85 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", "")) %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(RCP = "RCP85",
+         Model = "MRI-CGCM3_RCP85",
+         Prescription = "Transition",
+         FunctionalGroup = ifelse(Species %in% softwoods, "Softwoods",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods")),
+         TotalBiomass = sum(Biomass_MG),
+         Biomass_Percent = (Biomass_MG / TotalBiomass) * 100)
+
+# Harvesting Rates
+## Normal
+combinedData <- list()
+for (run in runs){
+  harvestDir <- file.path(mainDir, run, "Harvest")
+  filePath <- file.path(harvestDir, "biomass-harvest-summary-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData)
+
+finalTable[,c(1,2,3,38:67,69)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         Prescription = str_replace(Prescription, "\\s*\\([^)]*\\)", "")) %>%
+  group_by(Time, Prescription, ManagementArea, Species) %>%
+  summarise(mean = mean(Harvested_Biomass),
+            sd = sd(Harvested_Biomass)) %>%
+  ggplot(., aes(x = Time, y = mean, col = Species, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_grid(Prescription ~ ManagementArea) +
+  scale_y_continuous(name = "Biomass in Millions of Mg",
+                     breaks = c(0,1e6,2e6,3e6,4e6),
+                     labels = c(0,1,2,3,4))
+
+
+# Climate
+climateData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "Climate-future-input-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  climateData[[run]] <- data
+}
+climateData <- do.call(rbind, climateData) %>%
+  select(-`...28`)
+
+
+MRI_CGCM3_RCP85 <- climateData[,c(1,2,5,6,7,28)] %>%
+  mutate(mean_airtemp = (min_airtemp + max_airtemp) / 2) %>%
+  group_by(Year) %>%
+  summarise(meanppt = mean(ppt),
+            sumppt = sum(ppt),
+            airtemp = mean(mean_airtemp)) %>%
+  mutate(Model = "MRI-CGCM3_RCP85")
+
+# Annual Water Budget
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("Annual-water-budget-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)                                        # Flip added because it was coming out upside down
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)  # Convert to .tif file
+    combinedRasters[[newFileName]] <- rasterData
+    print(paste("Successfully read:", newFileName))
+  }
+}
+
+AWB10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+AWB20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+AWB30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+AWB40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+AWB50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+AWB60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+AWB70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+AWB80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+AWBStack_MRI_CGCM3_RCP85 <- c(AWB10,AWB20,AWB30,AWB40,AWB50,AWB60,AWB70,AWB80)
+plot(AWBStack_MRI_CGCM3_RCP85)
+
+
+AWBStack_MRI_CGCM3_RCP85Df <- AWBStack_MRI_CGCM3_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "AWB") %>%
+  group_by(Time) %>%
+  summarise(AWB = mean(AWB)) %>%
+  mutate(Model = "MRI_CGCM3_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+# Net Primary Productivity
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("AG_NPP-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+
+NPP10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+NPP20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+NPP30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+NPP40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+NPP50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+NPP60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+NPP70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+NPP80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+NPPStack_MRI_CGCM3_RCP85 <- c(NPP10,NPP20,NPP30,NPP40,NPP50,NPP60,NPP70,NPP80)
+plot(NPPStack_MRI_CGCM3_RCP85)
+NPPStack_MRI_CGCM3_RCP85Df <- NPPStack_MRI_CGCM3_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "NPP") %>%
+  group_by(Time) %>%
+  summarise(NPP = mean(NPP)) %>%
+  mutate(Model = "MRI-CGCM3_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Net Ecosystem Exchange----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("ANEE-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+ANEE10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+ANEE20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+ANEE30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+ANEE40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+ANEE50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+ANEE60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+ANEE70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+ANEE80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+ANEEStack_MRI_CGCM3_RCP85 <- c(ANEE10,ANEE20,ANEE30,ANEE40,ANEE50,ANEE60,ANEE70,ANEE80)
+plot(ANEEStack_MRI_CGCM3_RCP85)
+ANEEStack_MRI_CGCM3_RCP85Df <- ANEEStack_MRI_CGCM3_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "ANEE") %>%
+  group_by(Time) %>%
+  summarise(ANEE = mean(ANEE)) %>%
+  mutate(Model = "MRI-CGCM3_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Total Carbon----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("TotalC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+TotalC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+TotalC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+TotalC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+TotalC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+TotalC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+TotalC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+TotalC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+TotalC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+TotalCStack_MRI_CGCM3_RCP85 <- c(TotalC10,TotalC20,TotalC30,TotalC40,TotalC50,TotalC60,TotalC70,TotalC80)
+plot(TotalCStack_MRI_CGCM3_RCP85)
+TotalCStack_MRI_CGCM3_RCP85Df <- TotalCStack_MRI_CGCM3_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "TotalC") %>%
+  group_by(Time) %>%
+  summarise(TotalC = mean(TotalC)) %>%
+  mutate(Model = "MRI-CGCM3_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Soil Nitrogen----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SoilN-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SoilN10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SoilN20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SoilN30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SoilN40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SoilN50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SoilN60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SoilN70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SoilN80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SoilNStack_MRI_CGCM3_RCP85 <- c(SoilN10,SoilN20,SoilN30,SoilN40,SoilN50,SoilN60,SoilN70,SoilN80)
+plot(SoilNStack_MRI_CGCM3_RCP85)
+SoilNStack_MRI_CGCM3_RCP85Df <- SoilNStack_MRI_CGCM3_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SoilN") %>%
+  group_by(Time) %>%
+  summarise(SoilN = mean(SoilN)) %>%
+  mutate(Model = "MRI-CGCM3_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----SOMTC----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SOMTC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SOMTC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SOMTC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SOMTC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SOMTC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SOMTC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SOMTC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SOMTC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SOMTC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SOMTCStack_MRI_CGCM3_RCP85 <- c(SOMTC10,SOMTC20,SOMTC30,SOMTC40,SOMTC50,SOMTC60,SOMTC70,SOMTC80)
+plot(SOMTCStack_MRI_CGCM3_RCP85)
+SOMTCStack_MRI_CGCM3_RCP85Df <- SOMTCStack_MRI_CGCM3_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SOMTC") %>%
+  group_by(Time) %>%
+  summarise(SOMTC = mean(SOMTC)) %>%
+  mutate(Model = "MRI-CGCM3_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+```
+
+### LSLV (CCSM4)
+
+```{r}
+# Spp Biomass
+mainDir <- "D:/Landis Outputs/Transition/RCP85/LSLV"
+runs <- paste0("run", 1:5)
+combinedData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "spp-biomass-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData) %>%
+  select(-`...34`)
+
+# Composition through time
+sppBiomass_CCSM4_RCP85 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         RCP = "RCP85",
+         Model = "CCSM4_RCP85",
+         Prescription = "Transition")
+
+# Proportional composition
+propBiomass_CCSM4_RCP85 <- finalTable %>%
+  filter(NumActiveSites != 0) %>%
+  select(-EcoName, -NumActiveSites) %>%
+  pivot_longer(cols = c("AboveGroundBiomass_ACRU":"AboveGroundBiomass_TADI2"), names_to = "Species", values_to = "Biomass_MG") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", "")) %>%
+  group_by(Time, Species) %>%
+  summarise(Biomass_MG = weighted.mean(x = Biomass_MG, w = rep(c(528897,24948), length.out = n()))) %>%
+  mutate(RCP = "RCP85",
+         Model = "CCSM4_RCP85",
+         Prescription = "Transition",
+         FunctionalGroup = ifelse(Species %in% softwoods, "Softwoods",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods")),
+         TotalBiomass = sum(Biomass_MG),
+         Biomass_Percent = (Biomass_MG / TotalBiomass) * 100)
+
+# Harvesting Rates
+## Normal
+combinedData <- list()
+for (run in runs){
+  harvestDir <- file.path(mainDir, run, "Harvest")
+  filePath <- file.path(harvestDir, "biomass-harvest-summary-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  combinedData[[run]] <- data
+}
+finalTable <- do.call(rbind, combinedData)
+
+finalTable[,c(1,2,3,38:67,69)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  mutate(Species = str_replace(Species, "^[^_]*_", ""),
+         Prescription = str_replace(Prescription, "\\s*\\([^)]*\\)", "")) %>%
+  group_by(Time, Prescription, ManagementArea, Species) %>%
+  summarise(mean = mean(Harvested_Biomass),
+            sd = sd(Harvested_Biomass)) %>%
+  ggplot(., aes(x = Time, y = mean, col = Species, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_grid(Prescription ~ ManagementArea) +
+  scale_y_continuous(name = "Biomass in Millions of Mg",
+                     breaks = c(0,1e6,2e6,3e6,4e6),
+                     labels = c(0,1,2,3,4))
+
+
+# Climate
+climateData <- list()
+for (run in runs){
+  runDir <- file.path(mainDir, run)
+  filePath <- file.path(runDir, "Climate-future-input-log.csv")
+  data <- read_csv(filePath)
+  data$Run <- run
+  climateData[[run]] <- data
+}
+climateData <- do.call(rbind, climateData) %>%
+  select(-`...28`)
+
+
+CCSM4_RCP85 <- climateData[,c(1,2,5,6,7,28)] %>%
+  mutate(mean_airtemp = (min_airtemp + max_airtemp) / 2) %>%
+  group_by(Year) %>%
+  summarise(meanppt = mean(ppt),
+            sumppt = sum(ppt),
+            airtemp = mean(mean_airtemp)) %>%
+  mutate(Model = "CCSM4_RCP85")
+
+# Annual Water Budget
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("Annual-water-budget-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)                                        # Flip added because it was coming out upside down
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)  # Convert to .tif file
+    combinedRasters[[newFileName]] <- rasterData
+    print(paste("Successfully read:", newFileName))
+  }
+}
+
+AWB10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+AWB20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+AWB30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+AWB40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+AWB50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+AWB60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+AWB70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+AWB80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+AWBStack_CCSM4_RCP85 <- c(AWB10,AWB20,AWB30,AWB40,AWB50,AWB60,AWB70,AWB80)
+plot(AWBStack_CCSM4_RCP85)
+
+
+AWBStack_CCSM4_RCP85Df <- AWBStack_CCSM4_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "AWB") %>%
+  group_by(Time) %>%
+  summarise(AWB = mean(AWB)) %>%
+  mutate(Model = "CCSM4_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+# Net Primary Productivity
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("AG_NPP-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+
+NPP10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+NPP20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+NPP30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+NPP40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+NPP50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+NPP60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+NPP70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+NPP80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+NPPStack_CCSM4_RCP85 <- c(NPP10,NPP20,NPP30,NPP40,NPP50,NPP60,NPP70,NPP80)
+plot(NPPStack_CCSM4_RCP85)
+NPPStack_CCSM4_RCP85Df <- NPPStack_CCSM4_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "NPP") %>%
+  group_by(Time) %>%
+  summarise(NPP = mean(NPP)) %>%
+  mutate(Model = "CCSM4_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Net Ecosystem Exchange----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("ANEE-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+ANEE10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+ANEE20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+ANEE30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+ANEE40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+ANEE50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+ANEE60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+ANEE70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+ANEE80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+ANEEStack_CCSM4_RCP85 <- c(ANEE10,ANEE20,ANEE30,ANEE40,ANEE50,ANEE60,ANEE70,ANEE80)
+plot(ANEEStack_CCSM4_RCP85)
+ANEEStack_CCSM4_RCP85Df <- ANEEStack_CCSM4_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "ANEE") %>%
+  group_by(Time) %>%
+  summarise(ANEE = mean(ANEE)) %>%
+  mutate(Model = "CCSM4_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Total Carbon----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("TotalC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+TotalC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+TotalC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+TotalC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+TotalC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+TotalC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+TotalC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+TotalC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+TotalC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+TotalCStack_CCSM4_RCP85 <- c(TotalC10,TotalC20,TotalC30,TotalC40,TotalC50,TotalC60,TotalC70,TotalC80)
+plot(TotalCStack_CCSM4_RCP85)
+TotalCStack_CCSM4_RCP85Df <- TotalCStack_CCSM4_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "TotalC") %>%
+  group_by(Time) %>%
+  summarise(TotalC = mean(TotalC)) %>%
+  mutate(Model = "CCSM4_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----Soil Nitrogen----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SoilN-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SoilN10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SoilN20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SoilN30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SoilN40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SoilN50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SoilN60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SoilN70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SoilN80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SoilNStack_CCSM4_RCP85 <- c(SoilN10,SoilN20,SoilN30,SoilN40,SoilN50,SoilN60,SoilN70,SoilN80)
+plot(SoilNStack_CCSM4_RCP85)
+SoilNStack_CCSM4_RCP85Df <- SoilNStack_CCSM4_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SoilN") %>%
+  group_by(Time) %>%
+  summarise(SoilN = mean(SoilN)) %>%
+  mutate(Model = "CCSM4_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+#----SOMTC----#
+combinedRasters <- list()
+for (run in 1:5) {
+  runDir <- file.path(mainDir, paste0("run", run))
+  for (year in seq(10, 80, by = 10)) {
+    filename <- paste0("SOMTC-", year, ".img")
+    filePath <- file.path(runDir, filename)
+    rasterData <- rast(filePath)
+    crs(rasterData) <- "epsg:26917"
+    rasterData <- flip(rasterData)
+    newFileName <- sub("\\.img$", paste0("_run", run, ".tif"), filename)
+    combinedRasters[[newFileName]] <- rasterData
+  }
+}
+SOMTC10 <- c(combinedRasters[[1]],combinedRasters[[9]],combinedRasters[[17]],combinedRasters[[25]],combinedRasters[[33]]) %>% app(., "mean")
+SOMTC20 <- c(combinedRasters[[2]],combinedRasters[[10]],combinedRasters[[18]],combinedRasters[[26]],combinedRasters[[34]]) %>% app(., "mean")
+SOMTC30 <- c(combinedRasters[[3]],combinedRasters[[11]],combinedRasters[[19]],combinedRasters[[27]],combinedRasters[[35]]) %>% app(., "mean")
+SOMTC40 <- c(combinedRasters[[4]],combinedRasters[[12]],combinedRasters[[20]],combinedRasters[[28]],combinedRasters[[36]]) %>% app(., "mean")
+SOMTC50 <- c(combinedRasters[[5]],combinedRasters[[13]],combinedRasters[[21]],combinedRasters[[29]],combinedRasters[[37]]) %>% app(., "mean")
+SOMTC60 <- c(combinedRasters[[6]],combinedRasters[[14]],combinedRasters[[22]],combinedRasters[[30]],combinedRasters[[38]]) %>% app(., "mean")
+SOMTC70 <- c(combinedRasters[[7]],combinedRasters[[15]],combinedRasters[[23]],combinedRasters[[31]],combinedRasters[[39]]) %>% app(., "mean")
+SOMTC80 <- c(combinedRasters[[8]],combinedRasters[[16]],combinedRasters[[24]],combinedRasters[[32]],combinedRasters[[40]]) %>% app(., "mean")
+SOMTCStack_CCSM4_RCP85 <- c(SOMTC10,SOMTC20,SOMTC30,SOMTC40,SOMTC50,SOMTC60,SOMTC70,SOMTC80)
+plot(SOMTCStack_CCSM4_RCP85)
+SOMTCStack_CCSM4_RCP85Df <- SOMTCStack_CCSM4_RCP85 %>%
+  as.data.frame() %>%
+  `colnames<-`(c(2030, 2040, 2050, 2060, 2070, 2080, 2090, 2100)) %>%
+  mutate(rowSums = rowSums(.)) %>%
+  filter(rowSums > 0) %>%
+  select(-rowSums) %>%
+  pivot_longer(cols = c(`2030`, `2040`, `2050`, `2060`, `2070`, `2080`, `2090`, `2100`), 
+               names_to = "Time", 
+               values_to = "SOMTC") %>%
+  group_by(Time) %>%
+  summarise(SOMTC = mean(SOMTC)) %>%
+  mutate(Model = "CCSM4_RCP85",
+         RCP = "RCP85",
+         Prescription = "Transition")
+
+```
+
+
+
+
+
+# Joined up data
+
+```{r}
+# Climate
+## Temperature
+rbind(BNU_ESM_RCP45, MIROC_ESM_CHEM_RCP45, MRI_CGCM3_RCP45,CCSM4_RCP45,BNU_ESM_RCP85, MIROC_ESM_CHEM_RCP85, MRI_CGCM3_RCP85,CCSM4_RCP85) %>%
+  ggplot(., aes(x = Year, y = airtemp, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("Mean Air Temp (°C)")
+
+rbind(BNU_ESM_RCP45, MIROC_ESM_CHEM_RCP45, MRI_CGCM3_RCP45, CCSM4_RCP45, BNU_ESM_RCP85, MIROC_ESM_CHEM_RCP85, MRI_CGCM3_RCP85, CCSM4_RCP85) %>%
+  mutate(RCP = ifelse(grepl("45", Model), "RCP45", "RCP85")) %>%
+  ggplot(., aes(x = Year, y = airtemp, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("Mean Air Temp (°C)") +
+  facet_wrap(~RCP)
+
+## Precipitation
+rbind(BNU_ESM_RCP45, MIROC_ESM_CHEM_RCP45, MRI_CGCM3_RCP45,CCSM4_RCP45,BNU_ESM_RCP85, MIROC_ESM_CHEM_RCP85, MRI_CGCM3_RCP85,CCSM4_RCP85) %>%
+  ggplot(., aes(x = Year, y = sumppt, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("Total Precipitation (mm)")
+
+rbind(BNU_ESM_RCP45, MIROC_ESM_CHEM_RCP45, MRI_CGCM3_RCP45, CCSM4_RCP45, BNU_ESM_RCP85, MIROC_ESM_CHEM_RCP85, MRI_CGCM3_RCP85, CCSM4_RCP85) %>%
+  mutate(RCP = ifelse(grepl("45", Model), "RCP45", "RCP85")) %>%
+  ggplot(., aes(x = Year, y = sumppt, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("Total Precipitation (mm)") +
+  facet_wrap(~RCP)
+
+# Available Water Budget
+rbind(AWBStack_BNU_ESM_RCP45Df,AWBStack_CCSM4_RCP45Df,AWBStack_MIROC_ESM_CHEM_RCP45Df,AWBStack_MRI_CGCM3_RCP45Df,AWBStack_BNU_ESM_RCP85Df,AWBStack_CCSM4_RCP85Df,AWBStack_MIROC_ESM_CHEM_RCP85Df,AWBStack_MRI_CGCM3_RCP85Df) %>%
+  ggplot(., aes(x = as.numeric(Time), y = AWB, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  facet_wrap(~RCP)
+
+# Net Primary Productivity
+rbind(NPPStack_BNU_ESM_RCP45Df,NPPStack_CCSM4_RCP45Df,NPPStack_MIROC_ESM_CHEM_RCP45Df,NPPStack_MRI_CGCM3_RCP45Df,NPPStack_BNU_ESM_RCP85Df,NPPStack_CCSM4_RCP85Df,NPPStack_MIROC_ESM_CHEM_RCP85Df,NPPStack_MRI_CGCM3_RCP85Df) %>%
+  ggplot(., aes(x = as.numeric(Time), y = NPP, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  facet_wrap(~RCP)
+
+# Annual Net Ecosystem Exchange
+rbind(ANEEStack_BNU_ESM_RCP45Df,ANEEStack_CCSM4_RCP45Df,ANEEStack_MIROC_ESM_CHEM_RCP45Df,ANEEStack_MRI_CGCM3_RCP45Df,ANEEStack_BNU_ESM_RCP85Df,ANEEStack_CCSM4_RCP85Df,ANEEStack_MIROC_ESM_CHEM_RCP85Df,ANEEStack_MRI_CGCM3_RCP85Df) %>%
+  ggplot(., aes(x = as.numeric(Time), y = ANEE, col = Model)) +
+  geom_line(alpha = 0) +
+  theme_classic() +
+  facet_wrap(~RCP) +
+  geom_smooth(method = "lm", se = FALSE)
+
+# Total Carbon
+rbind(TotalCStack_BNU_ESM_RCP45Df,TotalCStack_CCSM4_RCP45Df,TotalCStack_MIROC_ESM_CHEM_RCP45Df,TotalCStack_MRI_CGCM3_RCP45Df,TotalCStack_BNU_ESM_RCP85Df,TotalCStack_CCSM4_RCP85Df,TotalCStack_MIROC_ESM_CHEM_RCP85Df,TotalCStack_MRI_CGCM3_RCP85Df) %>%
+  ggplot(., aes(x = as.numeric(Time), y = TotalC, col = Model)) +
+  geom_line(alpha = 1) +
+  theme_classic() +
+  facet_wrap(~RCP)
+
+# Soil Nitrogen
+rbind(SoilNStack_BNU_ESM_RCP45Df,SoilNStack_CCSM4_RCP45Df,SoilNStack_MIROC_ESM_CHEM_RCP45Df,SoilNStack_MRI_CGCM3_RCP45Df,SoilNStack_BNU_ESM_RCP85Df,SoilNStack_CCSM4_RCP85Df,SoilNStack_MIROC_ESM_CHEM_RCP85Df,SoilNStack_MRI_CGCM3_RCP85Df) %>%
+  ggplot(., aes(x = as.numeric(Time), y = SoilN, col = Model)) +
+  geom_line(alpha = 1) +
+  theme_classic() +
+  facet_wrap(~RCP)
+
+# SOMTC
+rbind(SOMTCStack_BNU_ESM_RCP45Df,SOMTCStack_CCSM4_RCP45Df,SOMTCStack_MIROC_ESM_CHEM_RCP45Df,SOMTCStack_MRI_CGCM3_RCP45Df,SOMTCStack_BNU_ESM_RCP85Df,SOMTCStack_CCSM4_RCP85Df,SOMTCStack_MIROC_ESM_CHEM_RCP85Df,SOMTCStack_MRI_CGCM3_RCP85Df) %>%
+  ggplot(., aes(x = as.numeric(Time), y = SOMTC, col = Model)) +
+  geom_line(alpha = 1) +
+  theme_classic() +
+  facet_wrap(~RCP)
+
+
+
+#----HARVESTING----#
+# Residual Biomass by Species, Climate Model and RCP
+rbind(sppBiomass_BNU_ESM_RCP45,sppBiomass_BNU_ESM_RCP85,sppBiomass_CCSM4_RCP45,sppBiomass_CCSM4_RCP85,sppBiomass_MIROC_ESM_CHEM_RCP45,sppBiomass_MIROC_ESM_CHEM_RCP85,sppBiomass_MRI_CGCM3_RCP45,sppBiomass_MRI_CGCM3_RCP85) %>%
+  filter(Time < 81) %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = Time, y = Biomass_MG, fill = Species)) +
+  geom_bar(stat = "identity", col = "black") +
+  theme_classic() +
+  facet_grid(RCP ~ Model, drop = TRUE) +
+  scale_x_continuous(name = "Year", breaks = seq(0,80,10), labels = seq(2020,2100,10)) +
+  scale_y_continuous(name = "Biomass (MG)", breaks = seq(0,12000,2000), labels = seq(0,12,2))
+
+
+# Residual Biomass by Functional Group, Climate Model and RCP
+rbind(sppBiomass_BNU_ESM_RCP45,sppBiomass_BNU_ESM_RCP85,sppBiomass_CCSM4_RCP45,sppBiomass_CCSM4_RCP85,sppBiomass_MIROC_ESM_CHEM_RCP45,sppBiomass_MIROC_ESM_CHEM_RCP85,sppBiomass_MRI_CGCM3_RCP45,sppBiomass_MRI_CGCM3_RCP85) %>%
+  filter(Time < 81) %>%
+  mutate(FunctionalGroup = ifelse(Species %in% softwoods, "Softwood",
+                                  ifelse(Species %in% oaks, "Oaks", "Hardwoods"))) %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = Time, y = Biomass_MG, fill = FunctionalGroup)) +
+  geom_bar(stat = "identity", col = "black") +
+  theme_classic() +
+  facet_grid(RCP ~ Model, drop = TRUE) +
+  scale_x_continuous(name = "Year", breaks = seq(0,80,10), labels = seq(2020,2100,10)) +
+  scale_y_continuous(name = "Biomass (MG)", breaks = seq(0,12000,2000), labels = seq(0,12,2))
+
+
+
+
+
+
+rbind(propBiomass_BNU_ESM_RCP45,propBiomass_BNU_ESM_RCP85,propBiomass_CCSM4_RCP45,propBiomass_CCSM4_RCP85,propBiomass_MIROC_ESM_CHEM_RCP45,propBiomass_MIROC_ESM_CHEM_RCP85,propBiomass_MRI_CGCM3_RCP45,propBiomass_MRI_CGCM3_RCP85) %>%
+  filter(Time < 81) %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = Time, y = Biomass_Percent, fill = Species)) +
+  geom_bar(stat = "identity", col = "black") +
+  theme_classic() +
+  facet_grid(RCP ~ Model, drop = TRUE)
+
+rbind(propBiomass_BNU_ESM_RCP45,propBiomass_BNU_ESM_RCP85,propBiomass_CCSM4_RCP45,propBiomass_CCSM4_RCP85,propBiomass_MIROC_ESM_CHEM_RCP45,propBiomass_MIROC_ESM_CHEM_RCP85,propBiomass_MRI_CGCM3_RCP45,propBiomass_MRI_CGCM3_RCP85) %>%
+  filter(Time < 81) %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = Time, y = Biomass_Percent, fill = FunctionalGroup)) +
+  geom_bar(stat = "identity", col = "black") +
+  theme_classic() +
+  facet_grid(RCP ~ Model, drop = TRUE)
+
+```
+  
+  
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
