@@ -1,0 +1,49 @@
+LandisData	Scenario
+
+Duration  	80
+
+Species   	/landis/treeMapSpecies.txt
+
+Ecoregions      /landis/clippedTest_ecoregions.txt
+EcoregionsMap   /landis/Clipped_Piedmont/ecoregions.tif
+
+CellLength  	70.71068 << meters, 100 x 100 m = 1 ha, my cells are 0.5ha
+
+
+>> -----------------------
+>> SUCCESSION EXTENSIONS
+>> -----------------------
+
+>> 	Succession Extension     Initialization File
+>> 	--------------------     -------------------
+   	"NECN Succession"	/landis/clippedTest_NECN.txt
+
+
+>> --------------------------
+>> DISTURBANCE EXTENSIONS
+>> -------------------------
+
+>> 	Disturbance Extension	Initialization File
+>>	--------------------	-------------------
+	"Biomass Harvest"	/landis/Harvest/Tree_Map_Resistance.txt
+>>	"Biomass Harvest"	/landis/Harvest/Tree_Map_Resilience.txt
+>>	"Biomass Harvest"	/landis/Harvest/Tree_Map_Transition.txt
+
+
+>>   DisturbancesRandomOrder  yes  	<< optional
+                         		<< Commented (default) is "no"
+
+
+>> ----------------------
+>> OUTPUT EXTENSIONS
+>> ----------------------
+
+>> 	Output Extension		Initialization File
+>> 	----------------		-------------------
+	"Output Biomass"		/landis/clippedTest_output_biomass.txt
+>>	"Output Biomass-by-Age"		/landis/clippedTest_output_age.txt
+>>	"Output Cohort Statistics"	"./output_CohortStats.txt"
+
+
+>> RandomNumberSeed  33  << optional parameter; uncomment for reproducibilty tests
+                          << Commented (default) is a RandomNumberSeed generated using the current time

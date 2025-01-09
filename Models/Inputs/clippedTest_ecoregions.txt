@@ -1,0 +1,8 @@
+LandisData	"Ecoregions"
+
+>> Map Code
+>> Active	Name		Description
+>>-------------------------------------------
+no	0	inactive	"off-map"
+yes	1	ecoregion1	"Region 1"
+yes	2	ecoregion2	"Region 2"

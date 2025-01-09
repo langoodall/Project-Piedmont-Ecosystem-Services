@@ -1,0 +1,98 @@
+LandisData	"NECN Succession"
+
+Timestep  10
+
+SeedingAlgorithm  WardSeedDispersal
+
+InitialCommunities      /landis/clippedTest_initial_communities_spinup.txt
+InitialCommunitiesMap   /landis/Clipped_Piedmont/finalTreeMap.tif
+ClimateConfigFile 	/landis/clippedTest_climate-generator-baseline.txt	
+
+SoilDepthMapName				/landis/Clipped_Piedmont/SoilDepth.tif
+SoilDrainMapName				/landis/Clipped_Piedmont/Drainage_0.2.tif << Original
+SoilBaseFlowMapName				/landis/Clipped_Piedmont/Baseflow.tif
+SoilStormFlowMapName				/landis/Clipped_Piedmont/Stormflow.tif
+SoilFieldCapacityMapName			/landis/Clipped_Piedmont/FieldCapacity.tif
+SoilWiltingPointMapName				/landis/Clipped_Piedmont/Wiltpoint.tif
+SoilPercentSandMapName				/landis/Clipped_Piedmont/SandPercentage.tif
+SoilPercentClayMapName				/landis/Clipped_Piedmont/ClayPercentage.tif
+InitialSOM1CsurfMapName				/landis/Clipped_Piedmont/SOM1surfC_F.tif
+InitialSOM1NsurfMapName				/landis/Clipped_Piedmont/SOM1surfN_F.tif
+InitialSOM1CsoilMapName				/landis/Clipped_Piedmont/SOM1soilC_F.tif
+InitialSOM1NsoilMapName				/landis/Clipped_Piedmont/SOM1soilN_F.tif
+InitialSOM2CMapName				/landis/Clipped_Piedmont/SOM2C_F.tif
+InitialSOM2NMapName				/landis/Clipped_Piedmont/SOM2N_F.tif
+InitialSOM3CMapName				/landis/Clipped_Piedmont/SOM3C_F.tif
+InitialSOM3NMapName				/landis/Clipped_Piedmont/SOM3N_F.tif
+InitialDeadWoodSurfaceMapName			/landis/Clipped_Piedmont/Deadwood.tif << Original
+InitialDeadCoarseRootsMapName			/landis/Clipped_Piedmont/DeadRoots.tif << Original
+
+
+CalibrateMode no
+SmokeModelOutputs no
+WaterDecayFunction Ratio <<Linear or Ratio
+
+
+ProbabilityEstablishAdjust 		1.0
+InitialMineralN				3.5
+InitialFineFuels 			0.1   << a fraction 0-1.0 of dead wood.
+AtmosphericNSlope			0.05 << 0.006 OG Louis
+AtmosphericNIntercept			0.3 << 0.28 OG Louis
+Latitude				36.0
+DenitrificationRate			0.07 << 0.013 OG Louis
+DecayRateSurf				1 << 1.34
+DecayRateSOM1				1 << 2
+DecayRateSOM2				0.5
+DecayRateSOM3				0.0000001
+
+>> Line 50
+>>MaximumLAI
+
+>> Shade	Max LAI
+>> Class	
+>> ----------	--------------------	
+>>	1	1 << 1 OG
+>>	2	2.5 << 2.5 OG
+>>	3	3.5 << 3.5 OG
+>>	4	6
+>>	5	8
+
+>>LightEstablishmentTable
+>> Spp Shade	Probability
+>> Class	   by Actual Shade
+>> ----------	--------------------	
+>>		0		1		2		3		4		5
+>>	1	0		0		0		0		0		0
+>>	2	0.318914344	0.28727091	0.1790111	0.1001583	0.0599135	0.008148978
+>>	3	0.132760284	0.24725390	0.2236164	0.1584120	0.1124406	0.021541257
+>>	4	0.021276570	0.13473743	0.2277030	0.2230448	0.1866750	0.027433456
+>>	5	0.001561109	0.04112036	0.1544640	0.2377944	0.2568878	0.032985513
+ 
+
+SpeciesParameters	/landis/speciesParameters.csv
+
+FunctionalGroupParameters	/landis/clippedTest_NECN_Functional_Table.csv
+
+
+FireReductionParameters
+>>	Severity	WoodLitter	Litter	SOM
+>>	Fire		Reduct		Reduct	Reduction
+>>	1		0.0		0.5	0.5
+>>	2		0.0		0.75	0.5
+>>	3		0.0		1.0	0.5
+
+HarvestReductionParameters
+>>					WoodLitter	Litter	SOM		CohortWood	CohortLeaf
+>> Name					Reduct		Reduct	Reduction	Removal		Removal
+>> -----------				----------	------	---------	----------	----------	
+	OH_RESISTANCE			0.5		0.5	0.2		0.5		0.5	<< RESISTANCE = half is removed
+	OH_RESILIENCE			0.4		0.4	0.16		0.4		0.4	<< RESILIENCE = less removed due to ecological benefits of deadwood
+	OH_TRANSITION			0.3		0.3	0.12		0.3		0.3	<< TRANSITION = even less removed
+	OP_RESISTANCE			0.5		0.5	0.2		0.5		0.5
+	OP_RESILIENCE			0.4		0.4	0.16		0.4		0.4
+	OP_TRANSITION			0.3		0.3	0.12		0.3		0.3
+	SOFT_RESISTANCE			0.5		0.5	0.2		0.5		0.5
+	SOFT_RESILIENCE			0.4		0.4	0.16		0.4		0.4
+	SOFT_TRANSITION			0.3		0.3	0.12		0.3		0.3
+	LOB_PLANTATION			1.0		1.0	1.0		1.0		1.0	<< All removed due to clearcut
+	THINNING			0.5		0.5	0.2		0.5		0.5

@@ -1,0 +1,35 @@
+LandisData  "Output Biomass-by-Age"
+
+Timestep   10
+
+MapNames   outputs/spp-biomass-by-age/{species}-{ageclass}-{timestep}.img
+
+Species	ACRU	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	CAAL27	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	CAGL8	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	FAGR	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	FRAM2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	FRPE	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	JUVI	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	LIST2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	LITU	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	NYBI	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	NYSY	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	OXAR	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	PIEC2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	PIPA2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	PIST	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	PITA	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	PIVI2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	PRSE2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QUAL	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QUCO2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QUFA	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QULA3	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QUNI	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QUPR2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QUPH	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QUST	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	QUVE	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	TAAS	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)
+	TADI2	ageclass1(1-10) ageclass2(11-20) ageclass3(21-30) ageclass4(31-40) ageclass5(41-50) ageclass6(51-60)

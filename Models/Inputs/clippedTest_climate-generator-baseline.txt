@@ -1,0 +1,15 @@
+LandisData "Climate Config"				
+		
+ClimateTimeSeries			Daily_SequencedYears
+ClimateFile				    /landis/Future_Climate_Tables/Clipped/BNU-ESM_RCP85.csv
+ClimateFileFormat			Daily_Temp-C_Precip-mmDay
+
+SpinUpClimateTimeSeries			Daily_SequencedYears
+SpinUpClimateFile			    /landis/Future_Climate_Tables/Clipped/BNU-ESM_RCP85.csv
+SpinUpClimateFileFormat			Daily_Temp-C_Precip-mmDay
+
+
+UsingFireClimate			no
+RelativeHumiditySlopeAdjust             77.68
+SpringStart				30
+WinterStart				320
