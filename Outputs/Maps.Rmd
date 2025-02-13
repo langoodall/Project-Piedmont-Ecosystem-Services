@@ -1,0 +1,342 @@
+---
+title: "Maps"
+output: pdf_document
+date: "2025-02-13"
+---
+
+```{r}
+library(tidyverse)
+library(terra)
+library(sf)
+```
+
+
+
+## Maps
+## Total Biomass
+
+
+## Annual Water Budget
+
+```{r}
+mainDir <- "D:/Landis Outputs"
+scenarios <- c("Resistance", "Resilience", "Transition")
+rcps <- c("RCP45", "RCP85")
+climates <- c("HSHV", "HSLV", "LSHV", "LSLV")
+runs <- paste0("run",1:5)
+timesteps <- 80
+
+raster_list <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates){
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("Annual-water-budget-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          # raster <- project(raster, res = 70.71068, templateRaster, method = "bilinear")
+          # raster_list[[length(raster_list) + 1]] <- raster
+          raster_list[[img_file]] <- raster
+        }
+      }
+    }
+  }
+}
+
+# Resistance
+AWB_Resistance_RCP45_HSHV <- c(raster_list[[1]],raster_list[[2]],raster_list[[3]],raster_list[[4]],raster_list[[5]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resistance_RCP45_HSLV <- c(raster_list[[6]],raster_list[[7]],raster_list[[8]],raster_list[[9]],raster_list[[10]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resistance_RCP45_LSHV <- c(raster_list[[11]],raster_list[[12]],raster_list[[13]],raster_list[[14]],raster_list[[15]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resistance_RCP45_LSLV <- c(raster_list[[16]],raster_list[[17]],raster_list[[18]],raster_list[[19]],raster_list[[20]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resistance_RCP85_HSHV <- c(raster_list[[21]],raster_list[[22]],raster_list[[23]],raster_list[[24]],raster_list[[25]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resistance_RCP85_HSLV <- c(raster_list[[26]],raster_list[[27]],raster_list[[28]],raster_list[[29]],raster_list[[30]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resistance_RCP85_LSHV <- c(raster_list[[31]],raster_list[[32]],raster_list[[33]],raster_list[[34]],raster_list[[35]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resistance_RCP85_LSLV <- c(raster_list[[36]],raster_list[[37]],raster_list[[38]],raster_list[[39]],raster_list[[40]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+resistance_RCP45_AWB_Stack <- c(AWB_Resistance_RCP45_HSHV,AWB_Resistance_RCP45_HSLV,AWB_Resistance_RCP45_LSHV,AWB_Resistance_RCP45_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP45", Prescription = "Resistance")
+resistance_RCP85_AWB_Stack <- c(AWB_Resistance_RCP85_HSHV,AWB_Resistance_RCP85_HSLV,AWB_Resistance_RCP85_LSHV,AWB_Resistance_RCP85_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP85", Prescription = "Resistance")
+# Resilience
+AWB_Resilience_RCP45_HSHV <- c(raster_list[[41]],raster_list[[42]],raster_list[[43]],raster_list[[44]],raster_list[[45]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resilience_RCP45_HSLV <- c(raster_list[[46]],raster_list[[47]],raster_list[[48]],raster_list[[49]],raster_list[[50]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resilience_RCP45_LSHV <- c(raster_list[[51]],raster_list[[52]],raster_list[[53]],raster_list[[54]],raster_list[[55]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resilience_RCP45_LSLV <- c(raster_list[[56]],raster_list[[57]],raster_list[[58]],raster_list[[59]],raster_list[[60]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resilience_RCP85_HSHV <- c(raster_list[[61]],raster_list[[62]],raster_list[[63]],raster_list[[64]],raster_list[[65]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resilience_RCP85_HSLV <- c(raster_list[[66]],raster_list[[67]],raster_list[[68]],raster_list[[69]],raster_list[[70]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resilience_RCP85_LSHV <- c(raster_list[[71]],raster_list[[72]],raster_list[[73]],raster_list[[74]],raster_list[[75]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Resilience_RCP85_LSLV <- c(raster_list[[76]],raster_list[[77]],raster_list[[78]],raster_list[[79]],raster_list[[80]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+resilience_RCP45_AWB_Stack <- c(AWB_Resilience_RCP45_HSHV,AWB_Resilience_RCP45_HSLV,AWB_Resilience_RCP45_LSHV,AWB_Resilience_RCP45_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP45", Prescription = "Resilience")
+resilience_RCP85_AWB_Stack <- c(AWB_Resilience_RCP85_HSHV,AWB_Resilience_RCP85_HSLV,AWB_Resilience_RCP85_LSHV,AWB_Resilience_RCP85_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP85", Prescription = "Resilience")
+# Transition
+AWB_Transition_RCP45_HSHV <- c(raster_list[[81]],raster_list[[82]],raster_list[[83]],raster_list[[84]],raster_list[[85]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Transition_RCP45_HSLV <- c(raster_list[[86]],raster_list[[87]],raster_list[[88]],raster_list[[89]],raster_list[[90]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Transition_RCP45_LSHV <- c(raster_list[[91]],raster_list[[92]],raster_list[[93]],raster_list[[94]],raster_list[[95]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Transition_RCP45_LSLV <- c(raster_list[[96]],raster_list[[97]],raster_list[[98]],raster_list[[99]],raster_list[[100]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Transition_RCP85_HSHV <- c(raster_list[[101]],raster_list[[102]],raster_list[[103]],raster_list[[104]],raster_list[[105]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Transition_RCP85_HSLV <- c(raster_list[[106]],raster_list[[107]],raster_list[[108]],raster_list[[109]],raster_list[[110]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Transition_RCP85_LSHV <- c(raster_list[[111]],raster_list[[112]],raster_list[[113]],raster_list[[114]],raster_list[[115]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+AWB_Transition_RCP85_LSLV <- c(raster_list[[116]],raster_list[[117]],raster_list[[118]],raster_list[[119]],raster_list[[110]]) %>% app(., "mean") %>% app(., function(x) ifelse(x == 0, NA, x))
+transition_RCP45_AWB_Stack <- c(AWB_Transition_RCP45_HSHV,AWB_Transition_RCP45_HSLV,AWB_Transition_RCP45_LSHV,AWB_Transition_RCP45_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP45", Prescription = "Transition")
+transition_RCP85_AWB_Stack <- c(AWB_Transition_RCP85_HSHV,AWB_Transition_RCP85_HSLV,AWB_Transition_RCP85_LSHV,AWB_Transition_RCP85_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP85", Prescription = "Transition")
+
+final_Resistance_AWB <- rbind(resistance_RCP45_AWB_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"),
+resistance_RCP85_AWB_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"))
+
+final_Resilience_AWB <- rbind(resilience_RCP45_AWB_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"),
+resilience_RCP85_AWB_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"))
+
+final_Transition_AWB <- rbind(transition_RCP45_AWB_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"),
+transition_RCP85_AWB_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"))
+
+final_AWB <- rbind(final_Resilience_AWB, final_Resistance_AWB, final_Transition_AWB)
+
+ggplot(final_Resistance_AWB) +
+  geom_raster(aes(x = x, y = y, fill = value)) +
+  scale_fill_gradient(low = "#a8dadc", high = "#1d3557", name = "AWB") +
+  theme_classic() +
+  facet_wrap(RCP ~ Model, ncol = 4)
+
+ggplot(final_Resilience_AWB) +
+  geom_raster(aes(x = x, y = y, fill = value)) +
+  scale_fill_gradient(low = "#a8dadc", high = "#1d3557", name = "AWB") +
+  theme_classic() +
+  facet_wrap(RCP ~ Model, ncol = 4)
+
+ggplot(final_Transition_AWB) +
+  geom_raster(aes(x = x, y = y, fill = value)) +
+  scale_fill_gradient(low = "#a8dadc", high = "#1d3557", name = "AWB") +
+  theme_classic() +
+  facet_wrap(RCP ~ Model, ncol = 4)
+
+
+
+ggplot(final_AWB, aes(x = Model, y = value, fill = Model)) +
+  geom_violin(width = 1) +
+  geom_boxplot(width = 0.05) +
+  theme_classic() +
+  facet_wrap(RCP~Prescription)
+
+
+
+```
+
+
+### Total Carbon
+
+```{r}
+mainDir <- "D:/Landis Outputs"
+scenarios <- c("Resistance", "Resilience", "Transition") # Fill in with Resilience
+rcps <- c("RCP45", "RCP85")
+climates <- c("HSHV", "HSLV", "LSHV", "LSLV")
+runs <- paste0("run",1:5)
+
+raster_list <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates){
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("TotalC-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          # raster <- project(raster, res = 70.71068, templateRaster, method = "bilinear")
+          raster_list[[length(raster_list) + 1]] <- raster
+        }
+      }
+    }
+  }
+}
+
+# Resistance
+TotalC_Resistance_RCP45_HSHV <- c(raster_list[[1]],raster_list[[2]],raster_list[[3]],raster_list[[4]],raster_list[[5]]) %>% app(., "mean")
+TotalC_Resistance_RCP45_HSLV <- c(raster_list[[6]],raster_list[[7]],raster_list[[8]],raster_list[[9]],raster_list[[10]]) %>% app(., "mean")
+TotalC_Resistance_RCP45_LSHV <- c(raster_list[[11]],raster_list[[12]],raster_list[[13]],raster_list[[14]],raster_list[[15]]) %>% app(., "mean")
+TotalC_Resistance_RCP45_LSLV <- c(raster_list[[16]],raster_list[[17]],raster_list[[18]],raster_list[[19]],raster_list[[20]]) %>% app(., "mean")
+TotalC_Resistance_RCP85_HSHV <- c(raster_list[[21]],raster_list[[22]],raster_list[[23]],raster_list[[24]],raster_list[[25]]) %>% app(., "mean")
+TotalC_Resistance_RCP85_HSLV <- c(raster_list[[26]],raster_list[[27]],raster_list[[28]],raster_list[[29]],raster_list[[30]]) %>% app(., "mean")
+TotalC_Resistance_RCP85_LSHV <- c(raster_list[[31]],raster_list[[32]],raster_list[[33]],raster_list[[34]],raster_list[[35]]) %>% app(., "mean")
+TotalC_Resistance_RCP85_LSLV <- c(raster_list[[36]],raster_list[[37]],raster_list[[38]],raster_list[[39]],raster_list[[40]]) %>% app(., "mean")
+resistance_RCP45_C_Stack <- c(TotalC_Resistance_RCP45_HSHV,TotalC_Resistance_RCP45_HSLV,TotalC_Resistance_RCP45_LSHV,TotalC_Resistance_RCP45_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP45", Presription = "Resistance")
+resistance_RCP85_C_Stack <- c(TotalC_Resistance_RCP85_HSHV,TotalC_Resistance_RCP85_HSLV,TotalC_Resistance_RCP85_LSHV,TotalC_Resistance_RCP85_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP85", Presription = "Resistance")
+# Resilience
+TotalC_Resilience_RCP45_HSHV <- c(raster_list[[41]],raster_list[[42]],raster_list[[43]],raster_list[[44]],raster_list[[45]]) %>% app(., "mean")
+TotalC_Resilience_RCP45_HSLV <- c(raster_list[[46]],raster_list[[47]],raster_list[[48]],raster_list[[49]],raster_list[[50]]) %>% app(., "mean")
+TotalC_Resilience_RCP45_LSHV <- c(raster_list[[51]],raster_list[[52]],raster_list[[53]],raster_list[[54]],raster_list[[55]]) %>% app(., "mean")
+TotalC_Resilience_RCP45_LSLV <- c(raster_list[[56]],raster_list[[57]],raster_list[[58]],raster_list[[59]],raster_list[[60]]) %>% app(., "mean")
+TotalC_Resilience_RCP85_HSHV <- c(raster_list[[61]],raster_list[[62]],raster_list[[63]],raster_list[[64]],raster_list[[65]]) %>% app(., "mean")
+TotalC_Resilience_RCP85_HSLV <- c(raster_list[[66]],raster_list[[67]],raster_list[[68]],raster_list[[69]],raster_list[[70]]) %>% app(., "mean")
+TotalC_Resilience_RCP85_LSHV <- c(raster_list[[71]],raster_list[[72]],raster_list[[73]],raster_list[[74]],raster_list[[75]]) %>% app(., "mean")
+TotalC_Resilience_RCP85_LSLV <- c(raster_list[[76]],raster_list[[77]],raster_list[[78]],raster_list[[79]],raster_list[[80]]) %>% app(., "mean")
+resilience_RCP45_C_Stack <- c(TotalC_Resilience_RCP45_HSHV,TotalC_Resilience_RCP45_HSLV,TotalC_Resilience_RCP45_LSHV,TotalC_Resilience_RCP45_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP45", Presription = "Resilience")
+resilience_RCP85_C_Stack <- c(TotalC_Resilience_RCP85_HSHV,TotalC_Resilience_RCP85_HSLV,TotalC_Resilience_RCP85_LSHV,TotalC_Resilience_RCP85_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP85", Presription = "Resilience")
+# Transition
+TotalC_Transition_RCP45_HSHV <- c(raster_list[[81]],raster_list[[82]],raster_list[[83]],raster_list[[84]],raster_list[[85]]) %>% app(., "mean")
+TotalC_Transition_RCP45_HSLV <- c(raster_list[[86]],raster_list[[87]],raster_list[[88]],raster_list[[89]],raster_list[[90]]) %>% app(., "mean")
+TotalC_Transition_RCP45_LSHV <- c(raster_list[[91]],raster_list[[92]],raster_list[[93]],raster_list[[94]],raster_list[[95]]) %>% app(., "mean")
+TotalC_Transition_RCP45_LSLV <- c(raster_list[[96]],raster_list[[97]],raster_list[[98]],raster_list[[99]],raster_list[[100]]) %>% app(., "mean")
+TotalC_Transition_RCP85_HSHV <- c(raster_list[[101]],raster_list[[102]],raster_list[[103]],raster_list[[104]],raster_list[[105]]) %>% app(., "mean")
+TotalC_Transition_RCP85_HSLV <- c(raster_list[[106]],raster_list[[107]],raster_list[[108]],raster_list[[109]],raster_list[[110]]) %>% app(., "mean")
+TotalC_Transition_RCP85_LSHV <- c(raster_list[[111]],raster_list[[112]],raster_list[[113]],raster_list[[114]],raster_list[[115]]) %>% app(., "mean")
+TotalC_Transition_RCP85_LSLV <- c(raster_list[[116]],raster_list[[117]],raster_list[[118]],raster_list[[119]],raster_list[[110]]) %>% app(., "mean")
+transition_RCP45_C_Stack <- c(TotalC_Transition_RCP45_HSHV,TotalC_Transition_RCP45_HSLV,TotalC_Transition_RCP45_LSHV,TotalC_Transition_RCP45_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP45", Presription = "Transition")
+transition_RCP85_C_Stack <- c(TotalC_Transition_RCP85_HSHV,TotalC_Transition_RCP85_HSLV,TotalC_Transition_RCP85_LSHV,TotalC_Transition_RCP85_LSLV) %>%
+  as.data.frame(xy = TRUE) %>%
+  `colnames<-`(c("x","y","BNU-ESM","MIROC-ESM-CHEM","MRI-CGCM3","CCSM4")) %>%
+  mutate(RCP = "RCP85", Presription = "Transition")
+
+
+final_Resistance_C <- rbind(resistance_RCP45_C_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"),
+  resistance_RCP85_C_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"))
+
+final_Resilience_C <- rbind(resilience_RCP45_C_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"),
+resilience_RCP85_C_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"))
+
+final_Transition_C <- rbind(transition_RCP45_C_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"),
+transition_RCP85_C_Stack %>%
+  pivot_longer(cols = c("BNU-ESM":"CCSM4"), values_to = "value", names_to = "Model"))
+
+
+ggplot(final_Resistance_C) +
+  geom_raster(aes(x = x, y = y, fill = value)) +
+  scale_fill_viridis_c() +
+  theme_classic() +
+  facet_wrap(RCP ~ Model, ncol = 4)
+
+ggplot(final_Resilience_C) +
+  geom_raster(aes(x = x, y = y, fill = value)) +
+  scale_fill_viridis_c() +
+  theme_classic() +
+  facet_wrap(RCP ~ Model, ncol = 4)
+
+ggplot(final_Transition_C) +
+  geom_raster(aes(x = x, y = y, fill = value)) +
+  scale_fill_viridis_c() +
+  theme_classic() +
+  facet_wrap(RCP ~ Model, ncol = 4)
+
+#################################################################
+
+mainDir <- "D:/Landis Outputs"
+scenarios <- c("Resistance", "Resilience", "Transition") # Fill in with Resilience
+rcps <- c("RCP45", "RCP85")
+climates <- c("HSHV", "HSLV", "LSHV", "LSLV")
+runs <- paste0("run",1:5)
+timesteps <- seq(10,80,10)
+
+raster_list <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("TotalC-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          
+          # Generate a unique name for the raster
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          
+          # Assign varname as an attribute to the raster
+          names(raster) <- name
+          
+          # Store raster in list with the same name
+          raster_list[[varname]] <- raster
+        }
+      }
+    }
+  }
+}
+
+raster_means <- list()  # Create a list to store mean values
+
+for (varname in names(raster_list)) {
+  raster <- raster_list[[varname]]
+  
+  # Filter out values that are 0
+  raster[raster == 0] <- NA  # Replace 0 with NA
+  
+  # Calculate the mean, extracting the numeric value
+  mean_value <- as.numeric(global(raster, fun = "mean", na.rm = TRUE)[1, 1])
+  
+  # Store the mean value in the list
+  raster_means[[varname]] <- mean_value
+}
+
+
+Total_CDfAll <- raster_means %>%
+  as.data.frame() %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  separate(rowname, into = c("Prescription", "RCP", "Model", "Run", "Time"), sep = "_") %>%
+  rename(Total_C = V1) %>%
+  mutate(Model = ifelse(Model == "HSHV" & RCP == "RCP45", "BNU-ESM_RCP45",
+                        ifelse(Model == "HSHV" & RCP == "RCP85", "BNU-ESM-RCP85",
+                               ifelse(Model == "HSLV" & RCP == "RCP45", "MIROC-ESM-CHEM_RCP45",
+                                      ifelse(Model == "HSLV" & RCP == "RCP85", "MIROC-ESM-CHEM_RCP85",
+                                             ifelse(Model == "LSHV" & RCP == "RCP45", "MRI-CGCM3_RCP45",
+                                                    ifelse(Model == "LSHV" & RCP == "RCP85", "MRI-CGCM3_RCP85",
+                                                           ifelse(Model == "LSLV" & RCP == "RCP45", "CCSM4_RCP45", "CCSM4_RCP85"))))))))
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+

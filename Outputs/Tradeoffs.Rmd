@@ -1,0 +1,681 @@
+---
+title: "Tradeoffs"
+output: pdf_document
+date: "2025-02-13"
+---
+
+```{r}
+library(tidyverse)
+library(terra)
+library(sf)
+library(aplpack)
+```
+
+
+# Trade-offs
+
+```{r}
+#----TOTAL CARBON----#
+mainDir <- "D:/Landis Outputs"
+scenarios <- c("Resistance", "Resilience", "Transition")
+rcps <- c("RCP45", "RCP85")
+climates <- c("HSHV", "HSLV", "LSHV", "LSLV")
+runs <- paste0("run",1:5)
+timesteps <- seq(10,80,10)
+
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("TotalC-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          rasterList[[name]] <- raster
+        }
+      }
+    }
+  }
+}
+
+carbonMeans <- list()
+
+for (name in names(rasterList)) {
+  raster <- rasterList[[name]]
+  raster[raster == 0] <- NA
+  meanValue <- as.numeric(global(raster, fun = "mean", na.rm = TRUE)[1, 1])
+  carbonMeans[[name]] <- meanValue
+}
+
+
+Total_CDfAll <- carbonMeans %>%
+  as.data.frame() %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  separate(rowname, into = c("Prescription", "RCP", "Model", "Run", "Time"), sep = "_") %>%
+  rename(Total_C = V1) %>%
+  mutate(Model = ifelse(Model == "HSHV" & RCP == "RCP45", "BNU-ESM_RCP45",
+                        ifelse(Model == "HSHV" & RCP == "RCP85", "BNU-ESM_RCP85",
+                               ifelse(Model == "HSLV" & RCP == "RCP45", "MIROC-ESM-CHEM_RCP45",
+                                      ifelse(Model == "HSLV" & RCP == "RCP85", "MIROC-ESM-CHEM_RCP85",
+                                             ifelse(Model == "LSHV" & RCP == "RCP45", "MRI-CGCM3_RCP45",
+                                                    ifelse(Model == "LSHV" & RCP == "RCP85", "MRI-CGCM3_RCP85",
+                                                           ifelse(Model == "LSLV" & RCP == "RCP45", "CCSM4_RCP45", "CCSM4_RCP85"))))))))
+Total_CDfAll$Time <- as.numeric(Total_CDfAll$Time)
+
+#----STRUCTURAL DIVERISTY----#
+filepath <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/Structural Diversity/"
+files = list.files(path = filepath, pattern = "*.csv", full.names = TRUE)
+
+strDivAllDf <- do.call(rbind, lapply(files, function(x) fread(x)))
+
+strDivDf <- strDivAllDf %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(H = mean(H))
+  
+harvestDfAll <- harvestDf[,c(1,2,70,38:67,69,3,71,72)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  group_by(Time, Run, Prescription, RCP, Model) %>%
+  summarise(Total_Harvest = sum(Harvested_Biomass))
+
+
+diversityAllDf <- rbind(
+      propBiomass_BNU_ESM_RCP45_Resilience_AllRuns,
+      propBiomass_BNU_ESM_RCP45_Resistance_AllRuns,
+      propBiomass_BNU_ESM_RCP45_Transition_AllRuns,
+      propBiomass_BNU_ESM_RCP85_Resilience_AllRuns,
+      propBiomass_BNU_ESM_RCP85_Resistance_AllRuns,
+      propBiomass_BNU_ESM_RCP85_Transition_AllRuns,
+      propBiomass_MIROC_ESM_CHEM_RCP45_Resilience_AllRuns,
+      propBiomass_MIROC_ESM_CHEM_RCP45_Resistance_AllRuns,
+      propBiomass_MIROC_ESM_CHEM_RCP45_Transition_AllRuns,
+      propBiomass_MIROC_ESM_CHEM_RCP85_Resilience_AllRuns,
+      propBiomass_MIROC_ESM_CHEM_RCP85_Resistance_AllRuns,
+      propBiomass_MIROC_ESM_CHEM_RCP85_Transition_AllRuns,
+      propBiomass_MRI_CGCM3_RCP45_Resilience_AllRuns,
+      propBiomass_MRI_CGCM3_RCP45_Resistance_AllRuns,
+      propBiomass_MRI_CGCM3_RCP45_Transition_AllRuns,
+      propBiomass_MRI_CGCM3_RCP85_Resilience_AllRuns,
+      propBiomass_MRI_CGCM3_RCP85_Resistance_AllRuns,
+      propBiomass_MRI_CGCM3_RCP85_Transition_AllRuns,
+      propBiomass_CCSM4_RCP45_Resilience_AllRuns,
+      propBiomass_CCSM4_RCP45_Resistance_AllRuns,
+      propBiomass_CCSM4_RCP45_Transition_AllRuns,
+      propBiomass_CCSM4_RCP85_Resilience_AllRuns,
+      propBiomass_CCSM4_RCP85_Resistance_AllRuns,
+      propBiomass_CCSM4_RCP85_Transition_AllRuns) %>%
+  group_by(Time, Run, RCP, Model, Prescription) %>%
+  mutate(Pi = Percent_Biomass / 100,
+         lnPi = log(Pi),
+         PixlnPi = Pi * lnPi) %>%
+  summarise(H = -sum(PixlnPi, na.rm = TRUE))
+
+
+successionLogAllDf <- rbind(successionLog_BNU_ESM_RCP45_Resilience_All,
+                       successionLog_BNU_ESM_RCP45_Resistance_All,
+                       successionLog_BNU_ESM_RCP45_Transition_All,
+                       successionLog_BNU_ESM_RCP85_Resilience_All,
+                       successionLog_BNU_ESM_RCP85_Resistance_All,
+                       successionLog_BNU_ESM_RCP85_Transition_All,
+                       successionLog_CCSM4_RCP45_Resilience_All,
+                       successionLog_CCSM4_RCP45_Resistance_All,
+                       successionLog_CCSM4_RCP45_Transition_All,
+                       successionLog_CCSM4_RCP85_Resilience_All,
+                       successionLog_CCSM4_RCP85_Resistance_All,
+                       successionLog_CCSM4_RCP85_Transition_All,
+                       successionLog_MIROC_ESM_CHEM_RCP45_Resilience_All,
+                       successionLog_MIROC_ESM_CHEM_RCP45_Resistance_All,
+                       successionLog_MIROC_ESM_CHEM_RCP45_Transition_All,
+                       successionLog_MIROC_ESM_CHEM_RCP85_Resilience_All,
+                       successionLog_MIROC_ESM_CHEM_RCP85_Resistance_All,
+                       successionLog_MIROC_ESM_CHEM_RCP85_Transition_All,
+                       successionLog_MRI_CGCM3_RCP45_Resilience_All,
+                       successionLog_MRI_CGCM3_RCP45_Resistance_All,
+                       successionLog_MRI_CGCM3_RCP45_Transition_All,
+                       successionLog_MRI_CGCM3_RCP85_Resilience_All,
+                       successionLog_MRI_CGCM3_RCP85_Resistance_All,
+                       successionLog_MRI_CGCM3_RCP85_Transition_All)
+
+
+
+#----AVAILABLE WATER----#
+AWBAllDf <- rbind(AWB_BNU_ESM_RCP45_ResilienceDf,
+                  AWB_BNU_ESM_RCP45_ResistanceDf,
+                  AWB_BNU_ESM_RCP45_TransitionDf,
+                  AWB_BNU_ESM_RCP85_ResilienceDf,
+                  AWB_BNU_ESM_RCP85_ResistanceDf,
+                  AWB_BNU_ESM_RCP85_TransitionDf,
+                  AWB_MIROC_ESM_CHEM_RCP45_ResilienceDf,
+                  AWB_MIROC_ESM_CHEM_RCP45_ResistanceDf,
+                  AWB_MIROC_ESM_CHEM_RCP45_TransitionDf,
+                  AWB_MIROC_ESM_CHEM_RCP85_ResilienceDf,
+                  AWB_MIROC_ESM_CHEM_RCP85_ResistanceDf,
+                  AWB_MIROC_ESM_CHEM_RCP85_TransitionDf,
+                  AWB_MRI_CGCM3_RCP45_ResilienceDf,
+                  AWB_MRI_CGCM3_RCP45_ResistanceDf,
+                  AWB_MRI_CGCM3_RCP45_TransitionDf,
+                  AWB_MRI_CGCM3_RCP85_ResilienceDf,
+                  AWB_MRI_CGCM3_RCP85_ResistanceDf,
+                  AWB_MRI_CGCM3_RCP85_TransitionDf,
+                  AWB_CCSM4_RCP45_ResilienceDf,
+                  AWB_CCSM4_RCP45_ResistanceDf,
+                  AWB_CCSM4_RCP45_TransitionDf,
+                  AWB_CCSM4_RCP85_ResilienceDf,
+                  AWB_CCSM4_RCP85_ResistanceDf,
+                  AWB_CCSM4_RCP85_TransitionDf)
+
+# Fruit Trees
+filepath <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/Fruit Tree/"
+files <- list.files(path = filepath, pattern = "*.csv", full.names = TRUE)
+fruitTreeAllDf <- do.call(rbind, lapply(files, function(x) fread(x))) %>% filter(Time > 0)
+
+# Cultural Trees
+filepath <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/Culturally Significant Trees/"
+files <- list.files(path = filepath, pattern = "*.csv", full.names = TRUE)
+cultureTreeAllDf <- do.call(rbind, lapply(files, function(x) fread(x)))%>% filter(Time > 0)
+
+# Create the tradeoff dataframe and ensuring all combinations are present
+tradeoffDf <- successionLogAllDf[,c(1,2,5,6,7,8,9,62:64)] %>%
+  filter(Time < 81, Time > 0) %>%
+  inner_join(strDivAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Structure_H = H) %>%
+  inner_join(diversityAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(Total_CDfAll, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(harvestDfAll, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(fruitTreeAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Fruit_Trees = Score) %>%
+  inner_join(cultureTreeAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Culture_Trees = Score) %>%
+  inner_join(AWBAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  mutate(ANPP = AG_NPPC * 2,
+         Benefit_NEEC = (NEEC - min(.$NEEC)) / (max(.$NEEC) - min(.$NEEC)),
+         Benefit_SOMTC = (SOMTC - min(.$SOMTC)) / (max(.$SOMTC) - min(.$SOMTC)),
+         Benefit_ANPP = (ANPP - min(ANPP)) / (max(ANPP) - min(ANPP)),
+         Benefit_Structure = (Structure_H - min(.$Structure_H)) / (max(.$Structure_H) - min(.$Structure_H)),
+         Benefit_H = (H - min(.$H)) / (max(.$H) - min(.$H)),
+         Benefit_AGB = (AGB - min(.$AGB)) / (max(.$AGB) - min(.$AGB)),
+         Benefit_FruitTrees = (Fruit_Trees - min(.$Fruit_Trees)) / (max(.$Fruit_Trees) - min(.$Fruit_Trees)),
+         Benefit_CultureTrees = (Culture_Trees - min(.$Culture_Trees)) / (max(.$Culture_Trees) - min(.$Culture_Trees)),
+         Benefit_TotalC = (Total_C - min(.$Total_C)) / (max(.$Total_C) - min(.$Total_C)),
+         Benefit_TotalHarvest = (Total_Harvest - min(.$Total_Harvest)) / (max(.$Total_Harvest) - min(.$Total_Harvest)),
+         Benefit_AWB = (AWB - min(.$AWB)) / (max(.$AWB) - min(.$AWB)),
+         
+         Tradeoff_AWB_NEEC = abs(Benefit_AWB - Benefit_NEEC) * (1 / sqrt(2)),
+         Tradeoff_NEEC_AWB = Tradeoff_AWB_NEEC,
+         Tradeoff_AWB_SOMTC = abs(Benefit_AWB - Benefit_SOMTC) * (1 / sqrt(2)),
+         Tradeoff_SOMTC_AWB = Tradeoff_AWB_SOMTC,
+         Tradeoff_AWB_ANPP = abs(Benefit_AWB - Benefit_ANPP) * (1 / sqrt(2)),
+         Tradeoff_ANPP_AWB = Tradeoff_AWB_ANPP,
+         Tradeoff_AWB_Structure = abs(Benefit_AWB - Benefit_Structure) * (1 / sqrt(2)),
+         Tradeoff_Structure_AWB = Tradeoff_AWB_Structure,
+         Tradeoff_AWB_H = abs(Benefit_AWB - Benefit_H) * (1 / sqrt(2)),
+         Tradeoff_H_AWB = Tradeoff_AWB_H,
+         Tradeoff_AWB_AGB = abs(Benefit_AWB - Benefit_AGB) * (1 / sqrt(2)),
+         Tradeoff_AGB_AWB = Tradeoff_AWB_AGB,
+         Tradeoff_AWB_FruitTrees = abs(Benefit_AWB - Benefit_FruitTrees) * (1 / sqrt(2)),
+         Tradeoff_FruitTrees_AWB = Tradeoff_AWB_FruitTrees,
+         Tradeoff_AWB_CultureTrees = abs(Benefit_AWB - Benefit_CultureTrees) * (1 / sqrt(2)),
+         Tradeoff_CultureTrees_AWB = Tradeoff_AWB_CultureTrees,
+         Tradeoff_AWB_TotalC = abs(Benefit_AWB - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_AWB = Tradeoff_AWB_TotalC,
+         Tradeoff_AWB_TotalHarvest = abs(Benefit_AWB - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_AWB = Tradeoff_AWB_TotalHarvest,
+         
+         Tradeoff_NEEC_SOMTC = abs(Benefit_NEEC - Benefit_SOMTC) * (1 / sqrt(2)),
+         Tradeoff_SOMTC_NEEC = Tradeoff_NEEC_SOMTC,
+         Tradeoff_NEEC_ANPP = abs(Benefit_NEEC - Benefit_ANPP) * (1 / sqrt(2)),
+         Tradeoff_ANPP_NEEC = Tradeoff_NEEC_ANPP,
+         Tradeoff_NEEC_Structure = abs(Benefit_NEEC - Benefit_Structure) * (1 / sqrt(2)),
+         Tradeoff_Structure_NEEC = Tradeoff_NEEC_Structure,
+         Tradeoff_NEEC_H = abs(Benefit_NEEC - Benefit_H) * (1 / sqrt(2)),
+         Tradeoff_H_NEEC = Tradeoff_NEEC_H,
+         Tradeoff_NEEC_AGB = abs(Benefit_NEEC - Benefit_AGB) * (1 / sqrt(2)),
+         Tradeoff_AGB_NEEC = Tradeoff_NEEC_AGB,
+         Tradeoff_NEEC_FruitTrees = abs(Benefit_NEEC - Benefit_FruitTrees) * (1 / sqrt(2)),
+         Tradeoff_FruitTrees_NEEC = Tradeoff_NEEC_FruitTrees,
+         Tradeoff_NEEC_CultureTrees = abs(Benefit_NEEC - Benefit_CultureTrees) * (1 / sqrt(2)),
+         Tradeoff_CultureTrees_NEEC = Tradeoff_NEEC_CultureTrees,
+         Tradeoff_NEEC_TotalC = abs(Benefit_NEEC - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_NEEC = Tradeoff_NEEC_TotalC,
+         Tradeoff_NEEC_TotalHarvest = abs(Benefit_NEEC - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_NEEC = Tradeoff_NEEC_TotalHarvest,
+         
+         Tradeoff_SOMTC_ANPP = abs(Benefit_SOMTC - Benefit_ANPP) * (1 / sqrt(2)),
+         Tradeoff_ANPP_SOMTC = Tradeoff_SOMTC_ANPP,
+         Tradeoff_SOMTC_Structure = abs(Benefit_SOMTC - Benefit_Structure) * (1 / sqrt(2)),
+         Tradeoff_Structure_SOMTC = Tradeoff_SOMTC_Structure,
+         Tradeoff_SOMTC_H = abs(Benefit_SOMTC - Benefit_H) * (1 / sqrt(2)),
+         Tradeoff_H_SOMTC = Tradeoff_SOMTC_H,
+         Tradeoff_SOMTC_AGB = abs(Benefit_SOMTC - Benefit_AGB) * (1 / sqrt(2)),
+         Tradeoff_AGB_SOMTC = Tradeoff_SOMTC_AGB,
+         Tradeoff_SOMTC_FruitTrees = abs(Benefit_SOMTC - Benefit_FruitTrees) * (1 / sqrt(2)),
+         Tradeoff_FruitTrees_SOMTC = Tradeoff_SOMTC_FruitTrees,
+         Tradeoff_SOMTC_CultureTrees = abs(Benefit_SOMTC - Benefit_CultureTrees) * (1 / sqrt(2)),
+         Tradeoff_CultureTrees_SOMTC = Tradeoff_SOMTC_CultureTrees,
+         Tradeoff_SOMTC_TotalC = abs(Benefit_SOMTC - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_SOMTC = Tradeoff_SOMTC_TotalC,
+         Tradeoff_SOMTC_TotalHarvest = abs(Benefit_SOMTC - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_SOMTC = Tradeoff_SOMTC_TotalHarvest,
+         
+         Tradeoff_ANPP_Structure = abs(Benefit_ANPP - Benefit_Structure) * (1 / sqrt(2)),
+         Tradeoff_Structure_ANPP = Tradeoff_ANPP_Structure,
+         Tradeoff_ANPP_H = abs(Benefit_ANPP - Benefit_H) * (1 / sqrt(2)),
+         Tradeoff_H_ANPP = Tradeoff_ANPP_H,
+         Tradeoff_ANPP_AGB = abs(Benefit_ANPP - Benefit_AGB) * (1 / sqrt(2)),
+         Tradeoff_AGB_ANPP = Tradeoff_ANPP_AGB,
+         Tradeoff_ANPP_FruitTrees = abs(Benefit_ANPP - Benefit_FruitTrees) * (1 / sqrt(2)),
+         Tradeoff_FruitTrees_ANPP = Tradeoff_ANPP_FruitTrees,
+         Tradeoff_ANPP_CultureTrees = abs(Benefit_ANPP - Benefit_CultureTrees) * (1 / sqrt(2)),
+         Tradeoff_CultureTrees_ANPP = Tradeoff_ANPP_CultureTrees,
+         Tradeoff_ANPP_TotalC = abs(Benefit_ANPP - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_ANPP = Tradeoff_ANPP_TotalC,
+         Tradeoff_ANPP_TotalHarvest = abs(Benefit_ANPP - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_ANPP = Tradeoff_ANPP_TotalHarvest,
+         
+         Tradeoff_Structure_H = abs(Benefit_Structure - Benefit_H) * (1 / sqrt(2)),
+         Tradeoff_H_Structure = Tradeoff_Structure_H,
+         Tradeoff_Structure_AGB = abs(Benefit_Structure - Benefit_AGB) * (1 / sqrt(2)),
+         Tradeoff_AGB_Structure = Tradeoff_Structure_AGB,
+         Tradeoff_Structure_FruitTrees = abs(Benefit_Structure - Benefit_FruitTrees) * (1 / sqrt(2)),
+         Tradeoff_FruitTrees_Structure = Tradeoff_Structure_FruitTrees,
+         Tradeoff_Structure_CultureTrees = abs(Benefit_Structure - Benefit_CultureTrees) * (1 / sqrt(2)),
+         Tradeoff_CultureTrees_Structure = Tradeoff_Structure_CultureTrees,
+         Tradeoff_Structure_TotalC = abs(Benefit_Structure - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_Structure = Tradeoff_Structure_TotalC,
+         Tradeoff_Structure_TotalHarvest = abs(Benefit_Structure - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_Structure = Tradeoff_Structure_TotalHarvest,
+         
+         Tradeoff_H_AGB = abs(Benefit_H - Benefit_AGB) * (1 / sqrt(2)),
+         Tradeoff_AGB_H = Tradeoff_H_AGB,
+         Tradeoff_H_FruitTrees = abs(Benefit_H - Benefit_FruitTrees) * (1 / sqrt(2)),
+         Tradeoff_FruitTrees_H = Tradeoff_H_FruitTrees,
+         Tradeoff_H_CultureTrees = abs(Benefit_H - Benefit_CultureTrees) * (1 / sqrt(2)),
+         Tradeoff_CultureTrees_H = Tradeoff_H_CultureTrees,
+         Tradeoff_H_TotalC = abs(Benefit_H - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_H = Tradeoff_H_TotalC,
+         Tradeoff_H_TotalHarvest = abs(Benefit_H - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_H = Tradeoff_H_TotalHarvest,
+         
+         Tradeoff_AGB_FruitTrees = abs(Benefit_AGB - Benefit_FruitTrees) * (1 / sqrt(2)),
+         Tradeoff_FruitTrees_AGB = Tradeoff_AGB_FruitTrees,
+         Tradeoff_AGB_CultureTrees = abs(Benefit_AGB - Benefit_CultureTrees) * (1 / sqrt(2)),
+         Tradeoff_CultureTrees_AGB = Tradeoff_AGB_CultureTrees,
+         Tradeoff_AGB_TotalC = abs(Benefit_AGB - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_AGB = Tradeoff_AGB_TotalC,
+         Tradeoff_AGB_TotalHarvest = abs(Benefit_AGB - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_AGB = Tradeoff_AGB_TotalHarvest,
+         
+         Tradeoff_FruitTrees_CultureTrees = abs(Benefit_FruitTrees - Benefit_CultureTrees) * (1 / sqrt(2)),
+         Tradeoff_CultureTrees_FruitTrees = Tradeoff_FruitTrees_CultureTrees,
+         Tradeoff_FruitTrees_TotalC = abs(Benefit_FruitTrees - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_FruitTrees = Tradeoff_FruitTrees_TotalC,
+         Tradeoff_FruitTrees_TotalHarvest = abs(Benefit_FruitTrees - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_FruitTrees = Tradeoff_FruitTrees_TotalHarvest,
+         
+         Tradeoff_CultureTrees_TotalC = abs(Benefit_CultureTrees - Benefit_TotalC) * (1 / sqrt(2)),
+         Tradeoff_TotalC_CultureTrees = Tradeoff_CultureTrees_TotalC,
+         Tradeoff_CultureTrees_TotalHarvest = abs(Benefit_CultureTrees - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_CultureTrees = Tradeoff_CultureTrees_TotalHarvest,
+         
+         Tradeoff_TotalC_TotalHarvest = abs(Benefit_TotalC - Benefit_TotalHarvest) * (1 / sqrt(2)),
+         Tradeoff_TotalHarvest_TotalC = Tradeoff_TotalC_TotalHarvest) %>%
+  select(Time, Run, RCP, Model, Prescription,
+Tradeoff_NEEC_AWB,
+Tradeoff_AWB_NEEC,
+Tradeoff_AWB_SOMTC,
+Tradeoff_SOMTC_AWB,
+Tradeoff_AWB_ANPP,
+Tradeoff_ANPP_AWB,
+Tradeoff_AWB_Structure,
+Tradeoff_Structure_AWB,
+Tradeoff_AWB_H,
+Tradeoff_H_AWB,
+Tradeoff_AWB_AGB,
+Tradeoff_AGB_AWB,
+Tradeoff_AWB_FruitTrees,
+Tradeoff_FruitTrees_AWB,
+Tradeoff_AWB_CultureTrees,
+Tradeoff_CultureTrees_AWB,
+Tradeoff_AWB_TotalC, 
+Tradeoff_TotalC_AWB,
+Tradeoff_AWB_TotalHarvest,
+Tradeoff_TotalHarvest_AWB,
+Tradeoff_NEEC_SOMTC,
+Tradeoff_SOMTC_NEEC,
+Tradeoff_NEEC_ANPP,
+Tradeoff_ANPP_NEEC,
+Tradeoff_NEEC_Structure,
+Tradeoff_Structure_NEEC,
+Tradeoff_NEEC_H,
+Tradeoff_H_NEEC,
+Tradeoff_NEEC_AGB,
+Tradeoff_AGB_NEEC,
+Tradeoff_NEEC_FruitTrees,
+Tradeoff_FruitTrees_NEEC,
+Tradeoff_NEEC_CultureTrees,
+Tradeoff_CultureTrees_NEEC,
+Tradeoff_NEEC_TotalC, 
+Tradeoff_TotalC_NEEC,
+Tradeoff_NEEC_TotalHarvest,
+Tradeoff_TotalHarvest_NEEC,
+Tradeoff_SOMTC_ANPP,
+Tradeoff_ANPP_SOMTC,
+Tradeoff_SOMTC_Structure,
+Tradeoff_Structure_SOMTC,
+Tradeoff_SOMTC_H,
+Tradeoff_H_SOMTC,
+Tradeoff_SOMTC_AGB,
+Tradeoff_AGB_SOMTC,
+Tradeoff_SOMTC_FruitTrees,
+Tradeoff_FruitTrees_SOMTC,
+Tradeoff_SOMTC_CultureTrees,
+Tradeoff_CultureTrees_SOMTC,
+Tradeoff_SOMTC_TotalC,
+Tradeoff_TotalC_SOMTC,
+Tradeoff_SOMTC_TotalHarvest,
+Tradeoff_TotalHarvest_SOMTC,
+Tradeoff_ANPP_Structure,
+Tradeoff_Structure_ANPP,
+Tradeoff_ANPP_H,
+Tradeoff_H_ANPP,
+Tradeoff_ANPP_AGB,
+Tradeoff_AGB_ANPP,
+Tradeoff_ANPP_FruitTrees,
+Tradeoff_FruitTrees_ANPP,
+Tradeoff_ANPP_CultureTrees,
+Tradeoff_CultureTrees_ANPP,
+Tradeoff_ANPP_TotalC,
+Tradeoff_TotalC_ANPP,
+Tradeoff_ANPP_TotalHarvest,
+Tradeoff_TotalHarvest_ANPP,
+Tradeoff_Structure_H,
+Tradeoff_H_Structure,
+Tradeoff_Structure_AGB,
+Tradeoff_AGB_Structure,
+Tradeoff_Structure_FruitTrees,
+Tradeoff_FruitTrees_Structure,
+Tradeoff_Structure_CultureTrees,
+Tradeoff_CultureTrees_Structure,
+Tradeoff_Structure_TotalC,
+Tradeoff_TotalC_Structure,
+Tradeoff_Structure_TotalHarvest,
+Tradeoff_TotalHarvest_Structure,
+Tradeoff_H_AGB,
+Tradeoff_AGB_H,
+Tradeoff_H_FruitTrees, 
+Tradeoff_FruitTrees_H,
+Tradeoff_H_CultureTrees, 
+Tradeoff_CultureTrees_H,
+Tradeoff_H_TotalC,
+Tradeoff_TotalC_H,
+Tradeoff_H_TotalHarvest, 
+Tradeoff_TotalHarvest_H,
+Tradeoff_AGB_FruitTrees,
+Tradeoff_FruitTrees_AGB,
+Tradeoff_AGB_CultureTrees,
+Tradeoff_CultureTrees_AGB,
+Tradeoff_AGB_TotalC, 
+Tradeoff_TotalC_AGB,
+Tradeoff_AGB_TotalHarvest,
+Tradeoff_TotalHarvest_AGB,
+Tradeoff_FruitTrees_CultureTrees,
+Tradeoff_CultureTrees_FruitTrees,
+Tradeoff_FruitTrees_TotalC,
+Tradeoff_TotalC_FruitTrees,
+Tradeoff_FruitTrees_TotalHarvest,
+Tradeoff_TotalHarvest_FruitTrees,
+Tradeoff_CultureTrees_TotalC,
+Tradeoff_TotalC_CultureTrees,
+Tradeoff_CultureTrees_TotalHarvest,
+Tradeoff_TotalHarvest_CultureTrees,
+Tradeoff_TotalC_TotalHarvest,
+Tradeoff_TotalHarvest_TotalC)
+
+# Make the dataframe long for plotting
+tradeoffDf_long <- tradeoffDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  pivot_longer(cols = starts_with("Tradeoff"),
+               names_to = "Tradeoff_Type",
+               values_to = "Value") %>%
+  separate(Tradeoff_Type, into = c("Prefix", "Var1", "Var2"), sep = "_") %>%
+  group_by(Time, RCP, Model, Prescription, Var1, Var2) %>%
+  summarise(Value = mean(Value)) %>%
+  mutate(x = factor(Var1, levels = c("AGB","ANPP","AWB","CultureTrees","FruitTrees","H","NEEC","SOMTC","Structure","TotalC","TotalHarvest")),
+         y = factor(Var2, levels = c("AGB","ANPP","AWB","CultureTrees","FruitTrees","H","NEEC","SOMTC","Structure","TotalC","TotalHarvest")))
+
+# Plot the heatmap
+ggplot(tradeoffDf_long %>% filter(RCP == "RCP45" & Time == 80), aes(x = x, y = y, fill = Value)) +
+  geom_tile() +
+  # geom_text(aes(label = round(Value, 2))) +
+  scale_fill_gradient(low = "#a8dadc", high = "#1d3557", name = "Tradeoff Value") +
+  labs(title = "Heatmap of Tradeoffs", x = "X", y = "Y") +
+  theme_classic() +
+  # coord_equal(expand = T) +
+  scale_y_discrete(limits = rev(levels(factor(tradeoffDf_long$y)))) + 
+  facet_wrap(Prescription ~ Model, ncol = 4)
+
+ggplot(tradeoffDf_long %>% filter(RCP == "RCP85" & Time == 80), aes(x = x, y = y, fill = Value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "#a8dadc", high = "#1d3557", name = "Tradeoff Value") +
+  labs(title = "Heatmap of Tradeoffs", x = "X", y = "Y") +
+  theme_classic() +
+  # coord_equal(expand = T) +
+  scale_y_discrete(limits = rev(levels(factor(tradeoffDf_long$y)))) + 
+  facet_wrap(Prescription ~ Model, ncol = 4)
+
+# Lower values equate to a smaller tradeoff between the two. Check to see which
+# benefit is the higher one and the point will fall on that side of the line in the plot
+
+# Tradeoff Totals RCP45
+tradeoffDf_long %>%
+  filter(RCP == "RCP45") %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(total = sum(Value) / 2) %>%
+  ggplot(., aes(x = Time, y = total, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_wrap(Prescription~Model)
+
+# Tradeoff Totals RCP85  
+tradeoffDf_long %>%
+  filter(RCP == "RCP85") %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(total = sum(Value) / 2) %>%
+  ggplot(., aes(x = Time, y = total, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_wrap(Prescription~Model)
+
+# All Scenario tradeoff scores
+tradeoffDf_long %>%
+  select(Time, RCP, Model, Prescription, Value) %>%
+  group_by(RCP, Model, Prescription) %>%
+  summarise(total = sum(Value) / 2) %>%
+  arrange(total)
+
+# Cumulative tradeoff scores by Model, prescription and RCP
+tradeoffDf_long %>%
+  select(Time, RCP, Model, Prescription, Value) %>%
+  group_by(RCP, Model, Prescription) %>%
+  summarise(total = sum(Value) / 2) %>%
+  arrange(total) %>%
+  ggplot(., aes(x = Model, y = total, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  facet_wrap(RCP~Prescription)
+
+# Tradeoff scores by prescription type
+data <- tradeoffDf_long %>%
+  select(Time, RCP, Model, Prescription, Value) %>%
+  group_by(Prescription) %>%
+  summarise(total = sum(Value) / 2, mean = mean(Value), sd = sd(Value), n = n(), se = sd / sqrt(n)) %>%
+  arrange(total)
+
+ggplot(data, aes(x = Prescription, y = total, fill = Prescription)) +
+  geom_bar(stat = "identity") +
+  theme_classic()
+
+ggplot(data, aes(x = Prescription, y = mean, fill = Prescription)) +
+  geom_bar(stat = "identity") +  
+  geom_errorbar(aes(x = Prescription, ymin = mean-se, ymax = mean+se), width = 0.25) +
+  theme_classic()
+
+# Tradeoff scores by model type
+data <- tradeoffDf_long %>%
+  select(Time, RCP, Model, Prescription, Value) %>%
+  group_by(Model) %>%
+  summarise(total = sum(Value) / 2, mean = mean(Value), sd = sd(Value), n = n(), se = sd / sqrt(n)) %>%
+  arrange(total)
+
+ggplot(data, aes(x = Model, y = total, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_classic()
+
+ggplot(data, aes(x = Model, y = mean, fill = Model)) +
+  geom_bar(stat = "identity") +  
+  geom_errorbar(aes(x = Model, ymin = mean-se, ymax = mean+se), width = 0.25) +
+  theme_classic()
+
+# Tradeoff scores by RCP type
+data <- tradeoffDf_long %>%
+  select(Time, RCP, Model, Prescription, Value) %>%
+  group_by(RCP) %>%
+  summarise(total = sum(Value) / 2, mean = mean(Value), sd = sd(Value), n = n(), se = sd / sqrt(n)) %>%
+  arrange(total)
+
+ggplot(data, aes(x = RCP, y = total, fill = RCP)) +
+  geom_bar(stat = "identity") +
+  theme_classic()
+
+ggplot(data, aes(x = RCP, y = mean, fill = RCP)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(x = RCP, ymin = mean-se, ymax = mean+se), width = 0.25) +
+  theme_classic()
+
+aov.1 <- aov(Value ~ Prescription * RCP * Model, data = tradeoffDf_long)
+summary(aov.1)
+TukeyHSD(aov.1)
+
+
+ggplot(tradeoffDf_long %>% filter(RCP == "RCP45" & Time == 80,
+                                  Value >= 0.5), aes(x = x, y = y, fill = Value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "#a8dadc", high = "#1d3557", name = "Tradeoff Value") +
+  labs(title = "Heatmap of Tradeoffs", x = "X", y = "Y") +
+  theme_classic() +
+  # coord_equal(expand = T) +
+  facet_wrap(Prescription ~ Model, ncol = 4)
+
+ggplot(tradeoffDf_long %>% filter(RCP == "RCP85" & Time == 80,
+                                  Value >= 0.5), aes(x = x, y = y, fill = Value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "#a8dadc", high = "#1d3557", name = "Tradeoff Value") +
+  labs(title = "Heatmap of Tradeoffs", x = "X", y = "Y") +
+  theme_classic() +
+  # coord_equal(expand = T) +
+  facet_wrap(Prescription ~ Model, ncol = 4)
+
+```
+
+
+# Correlations
+
+```{r}
+corrDf <- successionLogAllDf[,c(1,2,5,6,7,8,9,62:64)] %>%
+  filter(Time < 81, Time > 0) %>%
+  inner_join(strDivAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Structure_H = H) %>%
+  inner_join(diversityAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(Total_CDfAll, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(harvestDfAll, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(fruitTreeAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Fruit_Trees = Score) %>%
+  inner_join(cultureTreeAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Culture_Trees = Score) %>%
+  inner_join(AWBAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  mutate(ANPP = AG_NPPC * 2,
+         NEEC = (NEEC - min(.$NEEC)) / (max(.$NEEC) - min(.$NEEC)),
+         SOMTC = (SOMTC - min(.$SOMTC)) / (max(.$SOMTC) - min(.$SOMTC)),
+         ANPP = (ANPP - min(ANPP)) / (max(ANPP) - min(ANPP)),
+         Structure = (Structure_H - min(.$Structure_H)) / (max(.$Structure_H) - min(.$Structure_H)),
+         H = (H - min(.$H)) / (max(.$H) - min(.$H)),
+         AGB = (AGB - min(.$AGB)) / (max(.$AGB) - min(.$AGB)),
+         FruitTrees = (Fruit_Trees - min(.$Fruit_Trees)) / (max(.$Fruit_Trees) - min(.$Fruit_Trees)),
+         CultureTrees = (Culture_Trees - min(.$Culture_Trees)) / (max(.$Culture_Trees) - min(.$Culture_Trees)),
+         TotalC = (Total_C - min(.$Total_C)) / (max(.$Total_C) - min(.$Total_C)),
+         TotalHarvest = (Total_Harvest - min(.$Total_Harvest)) / (max(.$Total_Harvest) - min(.$Total_Harvest)),
+         AWB = (AWB - min(.$AWB)) / (max(.$AWB) - min(.$AWB))) %>%
+  select(Time, Run, RCP, Prescription, Model, NEEC, SOMTC, ANPP, Structure, H, AGB, FruitTrees, CultureTrees, TotalC, TotalHarvest, AWB) %>%
+  group_by(Time, Prescription, Model, RCP, Run) %>%
+  summarise_all(mean) %>%
+  select(-Run)
+
+x <- corrDf %>%
+  ungroup() %>%
+  filter(Prescription == "Resistance", Model == "BNU-ESM_RCP45") %>%
+  select(-Time, -Prescription, -Model, -RCP, -Run)
+
+corrplot(cor(x),
+         method = "color",
+         order = "alphabet",
+         type = "lower",
+         number.digits = 1,
+         addCoef.col = "white",
+         tl.pos = "ld",
+         bg = "grey")
+
+#################################################
+drop_cols <- seq(7, ncol(tradeoffDf), by = 2)
+tradeoffDf[, -drop_cols]
+  
+successionLogAllDf[,c(1,2,5,6,7,8,9,62:64)] %>%
+  filter(Time < 81, Time > 0) %>%
+  inner_join(strDivAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Structure_H = H) %>%
+  inner_join(diversityAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(Total_CDfAll, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(harvestDfAll, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(fruitTreeAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Fruit_Trees = Score) %>%
+  inner_join(cultureTreeAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Culture_Trees = Score) %>%
+  inner_join(AWBAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  mutate(ANPP = AG_NPPC * 2,
+         Fruit_Trees = as.numeric(Fruit_Trees)) %>%
+  group_by(Time, Model, RCP, Prescription) %>%
+  summarise_all(mean) %>%
+  ungroup() %>%
+  select(-Time,-Run,-Model,-Prescription,-RCP,-BG_NPPC,-AG_NPPC) %>%
+  scale(.) %>%
+  as.data.frame() %>%
+  .[,c(2,5)] %>%
+  aplpack::bagplot(., show.outlier = TRUE, show.whiskers = FALSE, col.loophull = "lightblue", col.baghull = "dodgerblue") %>%
+  abline(v = 0, col = "black") %>%
+  abline(h = 0, col = "black")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
