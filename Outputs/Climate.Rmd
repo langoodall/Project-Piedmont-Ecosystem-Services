@@ -1,0 +1,63 @@
+---
+title: "Climate"
+output: pdf_document
+date: "2025-02-14"
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+## Temperature
+rbind(BNU_ESM_RCP45, MIROC_ESM_CHEM_RCP45, MRI_CGCM3_RCP45,CCSM4_RCP45,BNU_ESM_RCP85, MIROC_ESM_CHEM_RCP85, MRI_CGCM3_RCP85,CCSM4_RCP85) %>%
+  ggplot(., aes(x = Year, y = airtemp, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("Mean Air Temp (°C)")
+
+rbind(BNU_ESM_RCP45, MIROC_ESM_CHEM_RCP45, MRI_CGCM3_RCP45, CCSM4_RCP45, BNU_ESM_RCP85, MIROC_ESM_CHEM_RCP85, MRI_CGCM3_RCP85, CCSM4_RCP85) %>%
+  mutate(RCP = ifelse(grepl("45", Model), "RCP45", "RCP85")) %>%
+  ggplot(., aes(x = Year, y = airtemp, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("Mean Air Temp (°C)") +
+  facet_wrap(~RCP)
+
+## Precipitation
+rbind(BNU_ESM_RCP45, MIROC_ESM_CHEM_RCP45, MRI_CGCM3_RCP45,CCSM4_RCP45,BNU_ESM_RCP85, MIROC_ESM_CHEM_RCP85, MRI_CGCM3_RCP85,CCSM4_RCP85) %>%
+  ggplot(., aes(x = Year, y = sumppt, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("Total Precipitation (mm)")
+
+rbind(BNU_ESM_RCP45, MIROC_ESM_CHEM_RCP45, MRI_CGCM3_RCP45, CCSM4_RCP45, BNU_ESM_RCP85, MIROC_ESM_CHEM_RCP85, MRI_CGCM3_RCP85, CCSM4_RCP85) %>%
+  mutate(RCP = ifelse(grepl("45", Model), "RCP45", "RCP85")) %>%
+  ggplot(., aes(x = Year, y = sumppt, col = Model)) +
+  geom_line() +
+  theme_classic() +
+  ylab("Total Precipitation (mm)") +
+  facet_wrap(~RCP)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
