@@ -14,6 +14,14 @@ library(sf)
 
 
 ```{r}
+
+data <- sppBiomassDfAll %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Biomass_MG = mean(Biomass_MG)) %>%
+  filter(Time != 0)
+
+
 # RCP & Model
 sppBiomassDfAll %>%
   mutate(Model = sub("_[^_]+$", "", Model)) %>%
@@ -162,7 +170,7 @@ sppBiomassDfAll %>%
   facet_grid(Prescription~Model)
 
 
-aov.1 <- aov(Biomass_MG ~ Prescription * RCP * Model, data = sppBiomassDfAll)
+aov.1 <- aov(Biomass_MG ~ Prescription * RCP * Model, data = data)
 summary(aov.1)
 TukeyHSD(aov.1)
 ```
@@ -203,14 +211,14 @@ harvestDfAll <- harvestDf[,c(1,2,70,38:67,69,3,71,72)] %>%
   mutate(Species = str_replace(Species, "^[^_]*_", ""),
          Model = sub("_[^_]+$", "", Model))
 
-
 harvestDfAll %>%
   group_by(Time, Species, Prescription, RCP) %>%
   summarise(Total_Harvest = mean(Total_Harvest)) %>%
   ggplot(., aes(x = Time, y = Total_Harvest, fill = Species)) +
   geom_bar(stat = "identity", col = "black") +
   theme_classic() +
-  facet_wrap(RCP~Prescription, ncol = 3)
+  scale_y_continuous(breaks = c(0, 2e7, 4e7), labels = c(0,2,4), name = "Biomass (Mg) 10's millions") +
+  facet_grid(RCP~Prescription)
 
 harvestDfAll %>%
   group_by(Time, Species, Prescription, Model) %>%
@@ -218,7 +226,8 @@ harvestDfAll %>%
   ggplot(., aes(x = Time, y = Total_Harvest, fill = Species)) +
   geom_bar(stat = "identity", col = "black") +
   theme_classic() +
-  facet_wrap(Prescription~Model)
+  scale_y_continuous(breaks = c(0, 2e7, 4e7), labels = c(0,2,4), name = "Biomass (Mg) 10's millions") +
+  facet_grid(Prescription~Model)
 
 harvestDfAll %>%
   group_by(Time, Species, RCP, Model) %>%
@@ -226,11 +235,33 @@ harvestDfAll %>%
   ggplot(., aes(x = Time, y = Total_Harvest, fill = Species)) +
   geom_bar(stat = "identity", col = "black") +
   theme_classic() +
-  facet_wrap(RCP~Model, ncol = 4)
+  scale_y_continuous(breaks = c(0, 2e7, 4e7), labels = c(0,2,4), name = "Biomass (Mg) 10's millions") +
+  facet_grid(RCP ~ Model)
 
-aov.1 <- aov(Total_Harvest ~ Prescription * RCP * Model, data = harvestDfAll)
+x <- harvestDf[,c(1,2,70,38:67,69,3,71,72)] %>%
+  pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
+  group_by(Time, Prescription, RCP, Model) %>%
+  summarise(Total_Harvest = sum(Harvested_Biomass)) %>%
+  ungroup() %>%
+  mutate(Model = sub("_[^_]+$", "", Model))
+
+aov.1 <- aov(Total_Harvest ~ RCP * Prescription * Model, data = x)
 summary(aov.1)
 TukeyHSD(aov.1)
+
+x %>%
+  group_by(Prescription, Model, RCP) %>%
+  summarise(Total_Harvest = sum(Total_Harvest)) %>%
+  ggplot(., aes(x = Prescription, y = Total_Harvest, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_classic() +
+  facet_wrap(~RCP)
+
+x %>%
+  group_by(Prescription, Model, RCP) %>%
+  summarise(Total_Harvest = sum(Total_Harvest)) %>%
+  arrange(desc(Total_Harvest))
+```
 
 # Total harvested biomass by Model & RCP
 harvestDf[,c(1,2,70,38:67,69,3,71,72)] %>%
@@ -319,7 +350,7 @@ data <- harvestDf[,c(1,2,70,38:67,69,3,71,72)] %>%
          Model = sub("_[^_]+$", "", Model))
 
 
-aov.1 <- aov(Harvested_Biomass ~ Prescription_Type * RCP, data = data)
+aov.1 <- aov(Harvested_Biomass ~ Prescription_Type * RCP * Model, data = data)
 summary(aov.1)
 TukeyHSD(aov.1)
 ```

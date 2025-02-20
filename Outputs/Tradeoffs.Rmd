@@ -4,11 +4,16 @@ output: pdf_document
 date: "2025-02-13"
 ---
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 library(tidyverse)
 library(terra)
 library(sf)
 library(aplpack)
+library(GGally)
+library(data.table)
+library(grid)
+library(gridExtra)
+templateRaster <- rast("D:/Landis Outputs/Raster Template/templateRaster.tif")
 ```
 
 
@@ -77,6 +82,37 @@ strDivAllDf <- do.call(rbind, lapply(files, function(x) fread(x)))
 strDivDf <- strDivAllDf %>%
   group_by(Time, RCP, Model, Prescription) %>%
   summarise(H = mean(H))
+
+strDivDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time != 0 & Time < 81) %>%
+  ggplot(., aes(x = Time, y = H, col = Model)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Prescription)
+
+strDivDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time != 0 & Time < 81) %>%
+  ggplot(., aes(x = Time, y = H, col = Prescription)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Model)
+
+strDivDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time != 0 & Time < 81) %>%
+  ggplot(., aes(x = Time, y = H, col = RCP)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(Model ~ Prescription)
+
+
+
+aov.1 <- aov(H ~ Prescription * RCP * Model, data = strDivDf)
+summary(aov.1)
+TukeyHSD(aov.1)
+
   
 harvestDfAll <- harvestDf[,c(1,2,70,38:67,69,3,71,72)] %>%
   pivot_longer(cols = c("BiomassHarvestedMg_ACRU":"BiomassHarvestedMg_TADI2"), names_to = "Species", values_to = "Harvested_Biomass") %>%
@@ -169,15 +205,146 @@ AWBAllDf <- rbind(AWB_BNU_ESM_RCP45_ResilienceDf,
                   AWB_CCSM4_RCP85_ResistanceDf,
                   AWB_CCSM4_RCP85_TransitionDf)
 
+
+
+
+AWBDf <- AWBAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, Model, RCP, Prescription) %>%
+  summarise(AWB = mean(AWB))
+
+AWBDf %>%
+  ggplot(., aes(x = Time, y = AWB, col = Model)) +
+  geom_line(size = 2, alpha = 0) +
+  geom_smooth(se = FALSE, method = "lm") +
+  theme_classic() +
+  facet_grid(RCP ~ Prescription)
+
+AWBDf %>%
+  ggplot(., aes(x = Time, y = AWB, col = Prescription)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Model)
+
+AWBDf %>%
+  ggplot(., aes(x = Time, y = AWB, col = RCP)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(Prescription ~ Model)
+
+AWBDf %>%
+  arrange(desc(AWB))
+
+AWBDf %>%
+  aov(AWB ~ Prescription * RCP * Model, data = .) %>%
+  summary(.)
+
+ggplot(AWBDf, aes(x = AWB, fill = Model)) +
+  geom_density(alpha = 0.5) +
+  theme_classic() +
+  facet_grid(RCP ~ Model)
+```
+
 # Fruit Trees
 filepath <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/Fruit Tree/"
 files <- list.files(path = filepath, pattern = "*.csv", full.names = TRUE)
 fruitTreeAllDf <- do.call(rbind, lapply(files, function(x) fread(x))) %>% filter(Time > 0)
 
+
+fruitTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  ggplot(., aes(x = Time, y = Score, col = Model)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Prescription)
+
+fruitTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  ggplot(., aes(x = Time, y = Score, col = Prescription)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Model)
+
+fruitTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  ggplot(., aes(x = Time, y = Score, col = RCP)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(Prescription ~ Model)
+
+fruitTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  arrange(desc(Score))
+
+x <- fruitTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  mutate(Score = as.numeric(Score))
+
+aov.1 <- aov(Score ~ RCP * Model * Prescription, data = x)
+summary(aov.1)
+
+
 # Cultural Trees
 filepath <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/Culturally Significant Trees/"
 files <- list.files(path = filepath, pattern = "*.csv", full.names = TRUE)
 cultureTreeAllDf <- do.call(rbind, lapply(files, function(x) fread(x)))%>% filter(Time > 0)
+
+cultureTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  ggplot(., aes(x = Time, y = Score, col = Model)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Prescription)
+
+cultureTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  ggplot(., aes(x = Time, y = Score, col = Prescription)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Model)
+
+cultureTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  ggplot(., aes(x = Time, y = Score, col = RCP)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(Prescription ~ Model)
+
+cultureTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  arrange(desc(Score))
+
+x <- cultureTreeAllDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  group_by(Time, RCP, Model, Prescription) %>%
+  summarise(Score = mean(Score)) %>%
+  mutate(Score = as.numeric(Score))
+
+aov.1 <- aov(Score ~ RCP * Model * Prescription, data = x)
+summary(aov.1)
+
+
+
+
+```
 
 # Create the tradeoff dataframe and ensuring all combinations are present
 tradeoffDf <- successionLogAllDf[,c(1,2,5,6,7,8,9,62:64)] %>%
@@ -506,8 +673,10 @@ tradeoffDf_long %>%
   arrange(total) %>%
   ggplot(., aes(x = Model, y = total, fill = Model)) +
   geom_bar(stat = "identity") +
+  geom_text(aes(label = round(total, 1)), vjust = -0.3, color = "black") +
   theme_classic() +
-  facet_wrap(RCP~Prescription)
+  facet_grid(RCP ~ Prescription)
+
 
 # Tradeoff scores by prescription type
 data <- tradeoffDf_long %>%
@@ -524,6 +693,7 @@ ggplot(data, aes(x = Prescription, y = mean, fill = Prescription)) +
   geom_bar(stat = "identity") +  
   geom_errorbar(aes(x = Prescription, ymin = mean-se, ymax = mean+se), width = 0.25) +
   theme_classic()
+
 
 # Tradeoff scores by model type
 data <- tradeoffDf_long %>%
@@ -562,6 +732,8 @@ summary(aov.1)
 TukeyHSD(aov.1)
 
 
+
+
 ggplot(tradeoffDf_long %>% filter(RCP == "RCP45" & Time == 80,
                                   Value >= 0.5), aes(x = x, y = y, fill = Value)) +
   geom_tile() +
@@ -581,6 +753,33 @@ ggplot(tradeoffDf_long %>% filter(RCP == "RCP85" & Time == 80,
   facet_wrap(Prescription ~ Model, ncol = 4)
 
 ```
+
+```{r}
+strDivDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time > 0) %>%
+  aov(H ~ Prescription * Model * RCP, data = .) %>%
+  summary(.)
+
+strDivDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time > 0) %>%
+  ggplot(., aes(x = Time, y = H, col = Model)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Prescription)
+```
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Correlations
@@ -633,7 +832,7 @@ corrplot(cor(x),
 drop_cols <- seq(7, ncol(tradeoffDf), by = 2)
 tradeoffDf[, -drop_cols]
   
-successionLogAllDf[,c(1,2,5,6,7,8,9,62:64)] %>%
+df <- successionLogAllDf[,c(1,2,5,6,7,8,9,62:64)] %>%
   filter(Time < 81, Time > 0) %>%
   inner_join(strDivAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
   rename(Structure_H = H) %>%
@@ -652,12 +851,153 @@ successionLogAllDf[,c(1,2,5,6,7,8,9,62:64)] %>%
   ungroup() %>%
   select(-Time,-Run,-Model,-Prescription,-RCP,-BG_NPPC,-AG_NPPC) %>%
   scale(.) %>%
+  as.data.frame()
+
+columnPairs <- combn(colnames(df), 2, simplify = FALSE)
+bagplots <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/Bagplots"
+
+plot_files <- list()
+for (pair in columnPairs) {
+  x <- pair[1]
+  y <- pair[2]
+  filename <- paste0(bagplots, "/", x, "vs", y, ".png")
+  plot_files[[paste(x, y, sep = "_")]] <- filename
+  # png(filename, width = 1000, height = 1000)
+  bag <- bagplot(df[, c(x, y)],
+                 show.outlier = TRUE, 
+                 show.whiskers = FALSE, 
+                 col.loophull = "lightblue", 
+                 col.baghull = "dodgerblue",
+                 main = paste(x, "vs", y))
+  
+  x_median_plot <- bag$center[1]
+  y_median_plot <- bag$center[2]
+  
+  abline(v = x_median_plot, col = "black", lty = 2)
+  abline(h = y_median_plot, col = "black", lty = 2)
+}
+# dev.off()
+
+corDf
+
+col_names <- colnames(df)
+n <- length(col_names)
+plot_list <- vector("list", length = n * n)
+
+for (i in 1:n) {
+  for (j in 1:n) {
+    index <- (i-1) * n + j
+    if (i > j) {
+      img_path <- plot_files[[paste(col_names[j], col_names[i], sep = "_")]]
+      plot_list[[index]] <- rasterGrob(as.raster(png::readPNG(img_path)), interpolate = TRUE)
+    } else {
+      plot_list[[index]] <- nullGrob()
+    }
+  }
+}
+
+grid.arrange(grobs = plot_list, nrow = n, ncol = n)
+
+
+# Get correlation data across all timesteps
+corDf <- cor(df, use = "pairwise.complete.obs") %>%
+  as.data.frame()
+names <- sort(colnames(corDf))
+corDf <- corDf[names,names]
+corDf[upper.tri(corDf, diag = TRUE)] <- NA
+corDf[corDf == 1] <- NA
+# Get cumulative r scores to determine 
+corDf <- corDf %>%
+  summarise_all(sum, na.rm = TRUE) %>%
+  rbind(corDf, .)
+row.names(corDf)[12] <- "Total"
+
+
+corDfFiltered <- corDf
+corDfFiltered[corDfFiltered > 0.8 | corDfFiltered < -0.8] <- NA
+corDfFiltered <- corDfFiltered[-12,] %>%
+  summarise_all(sum, na.rm = TRUE) %>%
+  `row.names<-`("Total") %>%
+  rbind(corDfFiltered[-12,], .)
+
+
+test <- corDfFiltered[-12,]
+test[upper.tri(test, diag = TRUE)] <- NA
+
+test <- unlist(test) %>% as.data.frame()
+
+
+
+mean <- mean(test$., na.rm = TRUE)
+sd <- sd(test$., na.rm = TRUE)
+
+# Generate x values for normal distribution curve
+xVals <- seq(min(test$., na.rm = TRUE), max(test$., na.rm = TRUE), length.out = 100)
+
+# Compute density values
+densityVals <- dnorm(xVals, mean = mean, sd = sd)
+
+# Create data frame for the normal curve
+densityDf <- data.frame(x = xVals, y = densityVals)
+
+# Plot
+ggplot(test, aes(x = .)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "lightblue", color = "black", alpha = 0.5) +  # Histogram
+  geom_line(data = densityDf, aes(x = x, y = y), color = "red", size = 1) +  # Normal distribution curve
+  geom_vline(xintercept = mean, color = "blue", linetype = "dashed", size = 1) +  # Mean line
+  geom_vline(xintercept = mean + sd, color = "blue") +
+  geom_vline(xintercept = mean + sd + sd, color = "blue") +
+  geom_vline(xintercept = mean - sd, color = "blue") +
+  geom_vline(xintercept = mean - sd - sd, color = "blue") +
+  labs(title = "Distribution Curve with Mean and SD",
+       x = "Value",
+       y = "Density") +
+  theme_minimal()
+
+test[!is.na(test)] %>%
   as.data.frame() %>%
+  filter(. < mean + sd & . > mean - sd)
+
+```
+
+
+
+
   .[,c(2,5)] %>%
   aplpack::bagplot(., show.outlier = TRUE, show.whiskers = FALSE, col.loophull = "lightblue", col.baghull = "dodgerblue") %>%
   abline(v = 0, col = "black") %>%
   abline(h = 0, col = "black")
 
+
+x <- successionLogAllDf[,c(1,2,5,6,7,8,9,62:64)] %>%
+  filter(Time < 81, Time > 0) %>%
+  inner_join(strDivAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Structure_H = H) %>%
+  inner_join(diversityAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(Total_CDfAll, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(harvestDfAll, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  inner_join(fruitTreeAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Fruit_Trees = Score) %>%
+  inner_join(cultureTreeAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  rename(Culture_Trees = Score) %>%
+  inner_join(AWBAllDf, by = c("Time", "Run", "RCP", "Model", "Prescription")) %>%
+  mutate(ANPP = AG_NPPC * 2,
+         Fruit_Trees = as.numeric(Fruit_Trees)) %>%
+  group_by(Time, Model, RCP, Prescription) %>%
+  summarise_all(mean) %>%
+  ungroup() %>%
+  select(-Time,-Run,-Model,-Prescription,-RCP,-BG_NPPC,-AG_NPPC) %>%
+  scale(.) %>%
+  as.data.frame()
+
+corrplot(cor(x),
+         method = "color",
+         order = "alphabet",
+         type = "lower",
+         number.digits = 1,
+         addCoef.col = "white",
+         tl.pos = "ld",
+         bg = "grey")
 
 ```
 

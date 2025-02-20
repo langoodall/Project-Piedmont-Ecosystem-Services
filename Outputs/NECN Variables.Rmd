@@ -39,6 +39,13 @@ successionLog <- rbind(successionLog_BNU_ESM_RCP45_Resilience,
   filter(Time < 81) %>%
   select(-ClimateRegionIndex, -NumSites)
 
+x <- successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time != 0) %>%
+  mutate(ANPP = (AG_NPPC + BG_NPPC) * 2)
+summary(aov(AGB ~ RCP * Model * Prescription, data = x))
+
+
 # NEEC
 successionLog %>%
   mutate(Model = sub("_[^_]+$", "", Model)) %>%
@@ -65,12 +72,46 @@ successionLog %>%
 successionLog %>%
   mutate(Model = sub("_[^_]+$", "", Model),
          NPP = (AG_NPPC + BG_NPPC) * 2) %>%
+  filter(Time != 0) %>%
   ggplot(., aes(x = Time, y = NPP, col = Model)) +
   geom_line(alpha = 1, size = 1.5) +
   theme_classic() +
   facet_grid(RCP ~ Prescription) +
   scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
   ylab("Total Net Primary Productivity")
+
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model),
+         NPP = (AG_NPPC + BG_NPPC) * 2) %>%
+  filter(Time != 0) %>%
+  ggplot(., aes(x = Time, y = NPP, col = Prescription)) +
+  geom_line(alpha = 0, size = 1.5) +
+  geom_hline(yintercept = 750) +
+  theme_classic() +
+  facet_grid(RCP ~ Model) +
+  geom_smooth(se = FALSE) +
+  scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
+  ylab("Total Net Primary Productivity")
+
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model),
+         NPP = (AG_NPPC + BG_NPPC) * 2) %>%
+  filter(Time != 0) %>%
+  ggplot(., aes(x = Time, y = NPP, col = RCP)) +
+  geom_line(alpha = 0, size = 1.5) +
+  theme_classic() +
+  facet_grid(Prescription ~ Model) +
+  geom_smooth(se = FALSE) +
+  scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
+  ylab("Total Net Primary Productivity")
+
+
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model),
+         NPP = (AG_NPPC + BG_NPPC) * 2) %>%
+  filter(Time != 0) %>%
+  select(Time, NPP, Prescription, RCP, Model) %>%
+  arrange(desc(NPP))
 
 # TotalN
 successionLog %>%
@@ -92,6 +133,24 @@ successionLog %>%
   scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
   ylab("Senesced Biomass (g/m2)")
 
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = Time, y = AgeMortality, col = Prescription)) +
+  geom_line(alpha = 1, size = 1.5) +
+  theme_classic() +
+  facet_grid(RCP ~ Model) +
+  scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
+  ylab("Senesced Biomass (g/m2)")
+
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = Time, y = AgeMortality, col = RCP)) +
+  geom_line(alpha = 1, size = 1.5) +
+  theme_classic() +
+  facet_grid(Prescription ~ Model) +
+  scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
+  ylab("Senesced Biomass (g/m2)")
+
 # Litterfall
 successionLog %>%
   mutate(Model = sub("_[^_]+$", "", Model)) %>%
@@ -102,13 +161,53 @@ successionLog %>%
   scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
   ylab("Litterfall (g/m2)")
 
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = Time, y = Litterfall, col = Prescription)) +
+  geom_line(alpha = 1, size = 1.5) +
+  theme_classic() +
+  facet_grid(RCP ~ Model) +
+  scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
+  ylab("Litterfall (g/m2)")
+
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time != 0) %>%
+  ggplot(., aes(x = Time, y = Litterfall, col = RCP)) +
+  geom_line(alpha = 1, size = 1.5) +
+  theme_classic() +
+  facet_grid(Model ~ Prescription) +
+  scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
+  ylab("Litterfall (g/m2)")
+
 # Aboveground Biomass
 successionLog %>%
   mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time != 0) %>%
   ggplot(., aes(x = Time, y = AGB, col = Model)) +
   geom_line(alpha = 1, size = 1.5) +
   theme_classic() +
   facet_grid(RCP ~ Prescription) +
+  scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
+  scale_y_continuous(name = "AGB (kg/m2)", breaks = c(8e3,1e4,1.2e4), labels = c(8,10,12))
+
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time != 0) %>%
+  ggplot(., aes(x = Time, y = AGB, col = Prescription)) +
+  geom_line(alpha = 1, size = 1.5) +
+  theme_classic() +
+  facet_grid(RCP ~ Model) +
+  scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
+  scale_y_continuous(name = "AGB (kg/m2)", breaks = c(8e3,1e4,1.2e4), labels = c(8,10,12))
+
+successionLog %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time != 0) %>%
+  ggplot(., aes(x = Time, y = AGB, col = RCP)) +
+  geom_line(alpha = 1, size = 1.5) +
+  theme_classic() +
+  facet_grid(Model ~ Prescription) +
   scale_x_continuous(name = "Year", breaks = c(0,20,40,60,80), labels = c(2020,2040,2060,2080,2100)) +
   scale_y_continuous(name = "AGB (kg/m2)", breaks = c(8e3,1e4,1.2e4), labels = c(8,10,12))
 
@@ -140,11 +239,40 @@ diversityDf <- rbind(diversity_BNU_ESM_RCP45_Resilience,
 
 diversityDf %>%
   mutate(Model = sub("_[^_]+$", "", Model)) %>%
-  filter(Time < 81) %>%
+  filter(Time < 81 & Time > 0) %>%
   ggplot(., aes(x = Time, y = H, col = Model)) +
   geom_line(size = 2) +
   theme_classic() +
   facet_grid(RCP ~ Prescription)
+
+diversityDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time < 81 & Time > 0) %>%
+  ggplot(., aes(x = Time, y = H, col = Prescription)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(RCP ~ Model)
+
+diversityDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time < 81 & Time > 0) %>%
+  ggplot(., aes(x = Time, y = H, col = RCP)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(Model ~ Prescription)
+
+diversityDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time < 81 & Time > 0) %>%
+  aov(H ~ Model * RCP * Prescription, data = .) %>%
+  summary(.)
+
+diversityDf %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  filter(Time < 81 & Time > 0) %>%
+  arrange(desc(H))
+
+```
 
 #----ANNUAL WATER BUDGET----#
 rbind(AWB_BNU_ESM_RCP45_ResistanceDf,
@@ -172,11 +300,98 @@ rbind(AWB_BNU_ESM_RCP45_ResistanceDf,
       AWB_MRI_CGCM3_RCP85_ResilienceDf,
       AWB_MRI_CGCM3_RCP85_TransitionDf) %>%
   mutate(Model = sub("_[^_]+$", "", Model)) %>%
-  # filter(RCP == "RCP85") %>%
   ggplot(., aes(x = as.integer(Time), y = AWB, col = Model)) +
   geom_line(size = 2) +
   theme_classic() +
   facet_grid(RCP ~ Prescription)
+
+rbind(AWB_BNU_ESM_RCP45_ResistanceDf,
+      AWB_BNU_ESM_RCP45_ResilienceDf,
+      AWB_BNU_ESM_RCP45_TransitionDf,
+      AWB_BNU_ESM_RCP85_ResistanceDf,
+      AWB_BNU_ESM_RCP85_ResilienceDf,
+      AWB_BNU_ESM_RCP85_TransitionDf,
+      AWB_CCSM4_RCP45_ResistanceDf,
+      AWB_CCSM4_RCP45_ResilienceDf,
+      AWB_CCSM4_RCP45_TransitionDf,
+      AWB_CCSM4_RCP85_ResistanceDf,
+      AWB_CCSM4_RCP85_ResilienceDf,
+      AWB_CCSM4_RCP85_TransitionDf,
+      AWB_MIROC_ESM_CHEM_RCP45_ResistanceDf,
+      AWB_MIROC_ESM_CHEM_RCP45_ResilienceDf,
+      AWB_MIROC_ESM_CHEM_RCP45_TransitionDf,
+      AWB_MIROC_ESM_CHEM_RCP85_ResistanceDf,
+      AWB_MIROC_ESM_CHEM_RCP85_ResilienceDf,
+      AWB_MIROC_ESM_CHEM_RCP85_TransitionDf,
+      AWB_MRI_CGCM3_RCP45_ResistanceDf,
+      AWB_MRI_CGCM3_RCP45_ResilienceDf,
+      AWB_MRI_CGCM3_RCP45_TransitionDf,
+      AWB_MRI_CGCM3_RCP85_ResistanceDf,
+      AWB_MRI_CGCM3_RCP85_ResilienceDf,
+      AWB_MRI_CGCM3_RCP85_TransitionDf) %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = as.integer(Time), y = AWB, col = RCP)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(Model ~ Prescription)
+
+rbind(AWB_BNU_ESM_RCP45_ResistanceDf,
+      AWB_BNU_ESM_RCP45_ResilienceDf,
+      AWB_BNU_ESM_RCP45_TransitionDf,
+      AWB_BNU_ESM_RCP85_ResistanceDf,
+      AWB_BNU_ESM_RCP85_ResilienceDf,
+      AWB_BNU_ESM_RCP85_TransitionDf,
+      AWB_CCSM4_RCP45_ResistanceDf,
+      AWB_CCSM4_RCP45_ResilienceDf,
+      AWB_CCSM4_RCP45_TransitionDf,
+      AWB_CCSM4_RCP85_ResistanceDf,
+      AWB_CCSM4_RCP85_ResilienceDf,
+      AWB_CCSM4_RCP85_TransitionDf,
+      AWB_MIROC_ESM_CHEM_RCP45_ResistanceDf,
+      AWB_MIROC_ESM_CHEM_RCP45_ResilienceDf,
+      AWB_MIROC_ESM_CHEM_RCP45_TransitionDf,
+      AWB_MIROC_ESM_CHEM_RCP85_ResistanceDf,
+      AWB_MIROC_ESM_CHEM_RCP85_ResilienceDf,
+      AWB_MIROC_ESM_CHEM_RCP85_TransitionDf,
+      AWB_MRI_CGCM3_RCP45_ResistanceDf,
+      AWB_MRI_CGCM3_RCP45_ResilienceDf,
+      AWB_MRI_CGCM3_RCP45_TransitionDf,
+      AWB_MRI_CGCM3_RCP85_ResistanceDf,
+      AWB_MRI_CGCM3_RCP85_ResilienceDf,
+      AWB_MRI_CGCM3_RCP85_TransitionDf) %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  ggplot(., aes(x = as.integer(Time), y = AWB, col = Prescription)) +
+  geom_line(size = 2) +
+  theme_classic() +
+  facet_grid(Model ~ RCP)
+
+rbind(AWB_BNU_ESM_RCP45_ResistanceDf,
+      AWB_BNU_ESM_RCP45_ResilienceDf,
+      AWB_BNU_ESM_RCP45_TransitionDf,
+      AWB_BNU_ESM_RCP85_ResistanceDf,
+      AWB_BNU_ESM_RCP85_ResilienceDf,
+      AWB_BNU_ESM_RCP85_TransitionDf,
+      AWB_CCSM4_RCP45_ResistanceDf,
+      AWB_CCSM4_RCP45_ResilienceDf,
+      AWB_CCSM4_RCP45_TransitionDf,
+      AWB_CCSM4_RCP85_ResistanceDf,
+      AWB_CCSM4_RCP85_ResilienceDf,
+      AWB_CCSM4_RCP85_TransitionDf,
+      AWB_MIROC_ESM_CHEM_RCP45_ResistanceDf,
+      AWB_MIROC_ESM_CHEM_RCP45_ResilienceDf,
+      AWB_MIROC_ESM_CHEM_RCP45_TransitionDf,
+      AWB_MIROC_ESM_CHEM_RCP85_ResistanceDf,
+      AWB_MIROC_ESM_CHEM_RCP85_ResilienceDf,
+      AWB_MIROC_ESM_CHEM_RCP85_TransitionDf,
+      AWB_MRI_CGCM3_RCP45_ResistanceDf,
+      AWB_MRI_CGCM3_RCP45_ResilienceDf,
+      AWB_MRI_CGCM3_RCP45_TransitionDf,
+      AWB_MRI_CGCM3_RCP85_ResistanceDf,
+      AWB_MRI_CGCM3_RCP85_ResilienceDf,
+      AWB_MRI_CGCM3_RCP85_TransitionDf) %>%
+  mutate(Model = sub("_[^_]+$", "", Model)) %>%
+  aov(AWB ~ Model * Prescription * RCP, data = .) %>%
+  summary(.)
 ```
 
 
