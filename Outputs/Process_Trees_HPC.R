@@ -16,7 +16,7 @@ df <- combinedData %>%
   group_by(MapCode, CohortAge, Time, Run) %>%
   summarise(Pi = sum(CohortBiomass) / unique(TotalBiomass)) %>%
   ungroup() %>%
-  group_by(MapCode, Time, Run) %>%
+  group_by(Time, Run) %>%
   summarise(H = -sum(Pi * log(Pi), na.rm = TRUE))
 
 fwrite(df, file = "/share/tcsi/lagoodal/R/Data/Structural_Diversity.csv")
