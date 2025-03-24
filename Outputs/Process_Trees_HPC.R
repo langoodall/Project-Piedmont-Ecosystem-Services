@@ -1,25 +1,19 @@
 # Load libraries
 library(tidyverse)
-library(data.table)
-library(terra)
-library(sf)
 
 # STRUCTURAL DIVERSITY
 # Read in data
 file_path <- "/share/tcsi/lagoodal/R/Data/combinedData.csv"
-combinedData <- fread(file_path)
+combinedData <- data.table::fread(file_path)
 
 # Calculate H for structural diversity
 df <- combinedData %>%
-  group_by(MapCode, Time, Run) %>%
-  mutate(TotalBiomass = sum(CohortBiomass)) %>%
-  group_by(MapCode, CohortAge, Time, Run) %>%
-  summarise(Pi = sum(CohortBiomass) / unique(TotalBiomass)) %>%
-  ungroup() %>%
-  group_by(Time, Run) %>%
-  summarise(H = -sum(Pi * log(Pi), na.rm = TRUE))
+  group_by(MapCode, Run, Time) %>%
+  summarise(H = -sum((table(CohortAge) / length(CohortAge)) * log(table(CohortAge) / length(CohortAge))), .groups = "drop") %>%
+  group_by(Run, Time) %>%
+  summarise(H = mean(H), .groups = "drop")
 
-fwrite(df, file = "/share/tcsi/lagoodal/R/Data/Structural_Diversity.csv")
+data.table::fwrite(df, file = "/share/tcsi/lagoodal/R/Data/Structural_Diversity.csv")
 
 # NUT TREES
 df <- combinedData %>%
@@ -43,7 +37,7 @@ df <- combinedData %>%
   group_by(Time, Run) %>%
   summarise(Score = sum(WeightedBiomass), .groups = "drop")
 
-fwrite(df, file = "/share/tcsi/lagoodal/R/Data/Fruit_Trees.csv")
+data.table::fwrite(df, file = "/share/tcsi/lagoodal/R/Data/Fruit_Trees.csv")
 
 # CULTURAL TREES
 df <- combinedData %>%
@@ -62,4 +56,4 @@ df <- combinedData %>%
 
 rm(combinedData)
 
-fwrite(df, file = "/share/tcsi/lagoodal/R/Data/Culture_Trees.csv")
+data.table::fwrite(df, file = "/share/tcsi/lagoodal/R/Data/Culture_Trees.csv")
