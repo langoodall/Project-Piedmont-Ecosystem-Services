@@ -1,0 +1,996 @@
+---
+title: "Untitled"
+output: pdf_document
+date: "2025-04-04"
+---
+
+```{r, warning  = FALSE, message = FALSE}
+library(tidyverse)
+library(tidyterra)
+library(terra)
+library(vegan)
+library(sf)
+templateRaster <- rast("D:/Landis Outputs/Raster Template/templateRaster.tif")
+species <- sort(c("JUVI","PIEC2","PIPA2","PIST","PITA","PIVI2","TAAS","TADI2","QUAL","QUCO2","QUFA","QULA3","QUNI","QUPH","QUPR2","QURU","QUST","QUVE","ACRU","CAAL27","CAGL8","FAGR","FRAM2","FRPE","LIST2","LITU","NYBI","NYSY","OXAR","PRSE2"))
+```
+
+
+
+
+```{r}
+#----TOTAL CARBON----#
+mainDir <- "D:/Landis Outputs"
+scenarios <- c("Resistance", "Resilience", "Transition")
+rcps <- c("RCP45", "RCP85")
+climates <- c("HSHV", "HSLV", "LSHV", "LSLV")
+model_names <- c("BNU-ESM", "MIROC-ESM-CHEM", "MRI-CGCM3", "CCSM4")
+runs <- paste0("run",1:5)
+timesteps <- 80
+
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("TotalC-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          rasterList[[name]] <- raster
+        }
+      }
+    }
+  }
+}
+
+Resistance_RCP45_HSHV <- c(rasterList[[1]],rasterList[[2]],rasterList[[3]],rasterList[[4]],rasterList[[5]]) %>% app(., "mean")
+names(Resistance_RCP45_HSHV) <- "Resistance_RCP45_HSHV"
+Resistance_RCP45_HSLV <- c(rasterList[[6]],rasterList[[7]],rasterList[[8]],rasterList[[9]],rasterList[[10]]) %>% app(., "mean")
+names(Resistance_RCP45_HSLV) <- "Resistance_RCP45_HSLV"
+Resistance_RCP45_LSHV <- c(rasterList[[11]],rasterList[[12]],rasterList[[13]],rasterList[[14]],rasterList[[15]]) %>% app(., "mean")
+names(Resistance_RCP45_LSHV) <- "Resistance_RCP45_LSHV"
+Resistance_RCP45_LSLV <- c(rasterList[[16]],rasterList[[17]],rasterList[[18]],rasterList[[19]],rasterList[[20]]) %>% app(., "mean")
+names(Resistance_RCP45_LSLV) <- "Resistance_RCP45_LSLV"
+Resistance_RCP85_HSHV <- c(rasterList[[21]],rasterList[[22]],rasterList[[23]],rasterList[[24]],rasterList[[25]]) %>% app(., "mean")
+names(Resistance_RCP85_HSHV) <- "Resistance_RCP85_HSHV"
+Resistance_RCP85_HSLV <- c(rasterList[[26]],rasterList[[27]],rasterList[[28]],rasterList[[29]],rasterList[[30]]) %>% app(., "mean")
+names(Resistance_RCP85_HSLV) <- "Resistance_RCP85_HSLV"
+Resistance_RCP85_LSHV <- c(rasterList[[31]],rasterList[[32]],rasterList[[33]],rasterList[[34]],rasterList[[35]]) %>% app(., "mean")
+names(Resistance_RCP85_LSHV) <- "Resistance_RCP85_LSHV"
+Resistance_RCP85_LSLV <- c(rasterList[[36]],rasterList[[37]],rasterList[[38]],rasterList[[39]],rasterList[[40]]) %>% app(., "mean")
+names(Resistance_RCP85_LSLV) <- "Resistance_RCP85_LSLV"
+Resilience_RCP45_HSHV <- c(rasterList[[41]],rasterList[[42]],rasterList[[43]],rasterList[[44]],rasterList[[45]]) %>% app(., "mean")
+names(Resilience_RCP45_HSHV) <- "Resilience_RCP45_HSHV"
+Resilience_RCP45_HSLV <- c(rasterList[[46]],rasterList[[47]],rasterList[[48]],rasterList[[49]],rasterList[[50]]) %>% app(., "mean")
+names(Resilience_RCP45_HSLV) <- "Resilience_RCP45_HSLV"
+Resilience_RCP45_LSHV <- c(rasterList[[51]],rasterList[[52]],rasterList[[53]],rasterList[[54]],rasterList[[55]]) %>% app(., "mean")
+names(Resilience_RCP45_LSHV) <- "Resilience_RCP45_LSHV"
+Resilience_RCP45_LSLV <- c(rasterList[[56]],rasterList[[57]],rasterList[[58]],rasterList[[59]],rasterList[[60]]) %>% app(., "mean")
+names(Resilience_RCP45_LSLV) <- "Resilience_RCP45_LSLV"
+Resilience_RCP85_HSHV <- c(rasterList[[61]],rasterList[[62]],rasterList[[63]],rasterList[[64]],rasterList[[65]]) %>% app(., "mean")
+names(Resilience_RCP85_HSHV) <- "Resilience_RCP85_HSHV"
+Resilience_RCP85_HSLV <- c(rasterList[[66]],rasterList[[67]],rasterList[[68]],rasterList[[69]],rasterList[[70]]) %>% app(., "mean")
+names(Resilience_RCP85_HSLV) <- "Resilience_RCP85_HSLV"
+Resilience_RCP85_LSHV <- c(rasterList[[71]],rasterList[[72]],rasterList[[73]],rasterList[[74]],rasterList[[75]]) %>% app(., "mean")
+names(Resilience_RCP85_LSHV) <- "Resilience_RCP85_LSHV"
+Resilience_RCP85_LSLV <- c(rasterList[[76]],rasterList[[77]],rasterList[[78]],rasterList[[79]],rasterList[[80]]) %>% app(., "mean")
+names(Resilience_RCP85_LSLV) <- "Resilience_RCP85_LSLV"
+Transition_RCP45_HSHV <- c(rasterList[[81]],rasterList[[82]],rasterList[[83]],rasterList[[84]],rasterList[[85]]) %>% app(., "mean")
+names(Transition_RCP45_HSHV) <- "Transition_RCP45_HSHV"
+Transition_RCP45_HSLV <- c(rasterList[[86]],rasterList[[87]],rasterList[[88]],rasterList[[89]],rasterList[[90]]) %>% app(., "mean")
+names(Transition_RCP45_HSLV) <- "Transition_RCP45_HSLV"
+Transition_RCP45_LSHV <- c(rasterList[[91]],rasterList[[92]],rasterList[[93]],rasterList[[94]],rasterList[[95]]) %>% app(., "mean")
+names(Transition_RCP45_LSHV) <- "Transition_RCP45_LSHV"
+Transition_RCP45_LSLV <- c(rasterList[[96]],rasterList[[97]],rasterList[[98]],rasterList[[99]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP45_LSLV) <- "Transition_RCP45_LSLV"
+Transition_RCP85_HSHV <- c(rasterList[[101]],rasterList[[102]],rasterList[[103]],rasterList[[104]],rasterList[[105]]) %>% app(., "mean")
+names(Transition_RCP85_HSHV) <- "Transition_RCP85_HSHV"
+Transition_RCP85_HSLV <- c(rasterList[[106]],rasterList[[107]],rasterList[[108]],rasterList[[109]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP85_HSLV) <- "Transition_RCP85_HSLV"
+Transition_RCP85_LSHV <- c(rasterList[[111]],rasterList[[112]],rasterList[[113]],rasterList[[114]],rasterList[[115]]) %>% app(., "mean")
+names(Transition_RCP85_LSHV) <- "Transition_RCP85_LSHV"
+Transition_RCP85_LSLV <- c(rasterList[[116]],rasterList[[117]],rasterList[[118]],rasterList[[119]],rasterList[[120]]) %>% app(., "mean")
+names(Transition_RCP85_LSLV) <- "Transition_RCP85_LSLV"
+
+carbonList <- list(Resistance_RCP45_HSHV,Resilience_RCP45_HSHV,Transition_RCP45_HSHV,Resistance_RCP85_HSHV,Resilience_RCP85_HSHV,Transition_RCP85_HSHV,Resistance_RCP45_HSLV,Resilience_RCP45_HSLV,Transition_RCP45_HSLV,Resistance_RCP85_HSLV,Resilience_RCP85_HSLV,Transition_RCP85_HSLV,Resistance_RCP45_LSHV,Resilience_RCP45_LSHV,Transition_RCP45_LSHV,Resistance_RCP85_LSHV,Resilience_RCP85_LSHV,Transition_RCP85_LSHV,Resistance_RCP45_LSLV,Resilience_RCP45_LSLV,Transition_RCP45_LSLV,Resistance_RCP85_LSLV,Resilience_RCP85_LSLV,Transition_RCP85_LSLV)
+
+directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/CARBON/"
+for (i in seq_along(carbonList)) {
+  writeRaster(carbonList[[i]],
+              filename = paste0(directory, names(carbonList[[i]]),".tif"),
+              NAflag = 0,
+              datatype = "FLT4S",
+              overwrite = TRUE)
+}
+
+#----ANPP----#
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("AG_NPP-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          rasterList[[name]] <- raster
+        }
+      }
+    }
+  }
+}
+
+Resistance_RCP45_HSHV <- c(rasterList[[1]],rasterList[[2]],rasterList[[3]],rasterList[[4]],rasterList[[5]]) %>% app(., "mean")
+names(Resistance_RCP45_HSHV) <- "Resistance_RCP45_HSHV"
+Resistance_RCP45_HSLV <- c(rasterList[[6]],rasterList[[7]],rasterList[[8]],rasterList[[9]],rasterList[[10]]) %>% app(., "mean")
+names(Resistance_RCP45_HSLV) <- "Resistance_RCP45_HSLV"
+Resistance_RCP45_LSHV <- c(rasterList[[11]],rasterList[[12]],rasterList[[13]],rasterList[[14]],rasterList[[15]]) %>% app(., "mean")
+names(Resistance_RCP45_LSHV) <- "Resistance_RCP45_LSHV"
+Resistance_RCP45_LSLV <- c(rasterList[[16]],rasterList[[17]],rasterList[[18]],rasterList[[19]],rasterList[[20]]) %>% app(., "mean")
+names(Resistance_RCP45_LSLV) <- "Resistance_RCP45_LSLV"
+Resistance_RCP85_HSHV <- c(rasterList[[21]],rasterList[[22]],rasterList[[23]],rasterList[[24]],rasterList[[25]]) %>% app(., "mean")
+names(Resistance_RCP85_HSHV) <- "Resistance_RCP85_HSHV"
+Resistance_RCP85_HSLV <- c(rasterList[[26]],rasterList[[27]],rasterList[[28]],rasterList[[29]],rasterList[[30]]) %>% app(., "mean")
+names(Resistance_RCP85_HSLV) <- "Resistance_RCP85_HSLV"
+Resistance_RCP85_LSHV <- c(rasterList[[31]],rasterList[[32]],rasterList[[33]],rasterList[[34]],rasterList[[35]]) %>% app(., "mean")
+names(Resistance_RCP85_LSHV) <- "Resistance_RCP85_LSHV"
+Resistance_RCP85_LSLV <- c(rasterList[[36]],rasterList[[37]],rasterList[[38]],rasterList[[39]],rasterList[[40]]) %>% app(., "mean")
+names(Resistance_RCP85_LSLV) <- "Resistance_RCP85_LSLV"
+Resilience_RCP45_HSHV <- c(rasterList[[41]],rasterList[[42]],rasterList[[43]],rasterList[[44]],rasterList[[45]]) %>% app(., "mean")
+names(Resilience_RCP45_HSHV) <- "Resilience_RCP45_HSHV"
+Resilience_RCP45_HSLV <- c(rasterList[[46]],rasterList[[47]],rasterList[[48]],rasterList[[49]],rasterList[[50]]) %>% app(., "mean")
+names(Resilience_RCP45_HSLV) <- "Resilience_RCP45_HSLV"
+Resilience_RCP45_LSHV <- c(rasterList[[51]],rasterList[[52]],rasterList[[53]],rasterList[[54]],rasterList[[55]]) %>% app(., "mean")
+names(Resilience_RCP45_LSHV) <- "Resilience_RCP45_LSHV"
+Resilience_RCP45_LSLV <- c(rasterList[[56]],rasterList[[57]],rasterList[[58]],rasterList[[59]],rasterList[[60]]) %>% app(., "mean")
+names(Resilience_RCP45_LSLV) <- "Resilience_RCP45_LSLV"
+Resilience_RCP85_HSHV <- c(rasterList[[61]],rasterList[[62]],rasterList[[63]],rasterList[[64]],rasterList[[65]]) %>% app(., "mean")
+names(Resilience_RCP85_HSHV) <- "Resilience_RCP85_HSHV"
+Resilience_RCP85_HSLV <- c(rasterList[[66]],rasterList[[67]],rasterList[[68]],rasterList[[69]],rasterList[[70]]) %>% app(., "mean")
+names(Resilience_RCP85_HSLV) <- "Resilience_RCP85_HSLV"
+Resilience_RCP85_LSHV <- c(rasterList[[71]],rasterList[[72]],rasterList[[73]],rasterList[[74]],rasterList[[75]]) %>% app(., "mean")
+names(Resilience_RCP85_LSHV) <- "Resilience_RCP85_LSHV"
+Resilience_RCP85_LSLV <- c(rasterList[[76]],rasterList[[77]],rasterList[[78]],rasterList[[79]],rasterList[[80]]) %>% app(., "mean")
+names(Resilience_RCP85_LSLV) <- "Resilience_RCP85_LSLV"
+Transition_RCP45_HSHV <- c(rasterList[[81]],rasterList[[82]],rasterList[[83]],rasterList[[84]],rasterList[[85]]) %>% app(., "mean")
+names(Transition_RCP45_HSHV) <- "Transition_RCP45_HSHV"
+Transition_RCP45_HSLV <- c(rasterList[[86]],rasterList[[87]],rasterList[[88]],rasterList[[89]],rasterList[[90]]) %>% app(., "mean")
+names(Transition_RCP45_HSLV) <- "Transition_RCP45_HSLV"
+Transition_RCP45_LSHV <- c(rasterList[[91]],rasterList[[92]],rasterList[[93]],rasterList[[94]],rasterList[[95]]) %>% app(., "mean")
+names(Transition_RCP45_LSHV) <- "Transition_RCP45_LSHV"
+Transition_RCP45_LSLV <- c(rasterList[[96]],rasterList[[97]],rasterList[[98]],rasterList[[99]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP45_LSLV) <- "Transition_RCP45_LSLV"
+Transition_RCP85_HSHV <- c(rasterList[[101]],rasterList[[102]],rasterList[[103]],rasterList[[104]],rasterList[[105]]) %>% app(., "mean")
+names(Transition_RCP85_HSHV) <- "Transition_RCP85_HSHV"
+Transition_RCP85_HSLV <- c(rasterList[[106]],rasterList[[107]],rasterList[[108]],rasterList[[109]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP85_HSLV) <- "Transition_RCP85_HSLV"
+Transition_RCP85_LSHV <- c(rasterList[[111]],rasterList[[112]],rasterList[[113]],rasterList[[114]],rasterList[[115]]) %>% app(., "mean")
+names(Transition_RCP85_LSHV) <- "Transition_RCP85_LSHV"
+Transition_RCP85_LSLV <- c(rasterList[[116]],rasterList[[117]],rasterList[[118]],rasterList[[119]],rasterList[[120]]) %>% app(., "mean")
+names(Transition_RCP85_LSLV) <- "Transition_RCP85_LSLV"
+
+anppList <- list(Resistance_RCP45_HSHV,Resilience_RCP45_HSHV,Transition_RCP45_HSHV,Resistance_RCP85_HSHV,Resilience_RCP85_HSHV,Transition_RCP85_HSHV,Resistance_RCP45_HSLV,Resilience_RCP45_HSLV,Transition_RCP45_HSLV,Resistance_RCP85_HSLV,Resilience_RCP85_HSLV,Transition_RCP85_HSLV,Resistance_RCP45_LSHV,Resilience_RCP45_LSHV,Transition_RCP45_LSHV,Resistance_RCP85_LSHV,Resilience_RCP85_LSHV,Transition_RCP85_LSHV,Resistance_RCP45_LSLV,Resilience_RCP45_LSLV,Transition_RCP45_LSLV,Resistance_RCP85_LSLV,Resilience_RCP85_LSLV,Transition_RCP85_LSLV)
+
+directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/ANPP/"
+for (i in seq_along(anppList)) {
+  writeRaster(anppList[[i]],
+              filename = paste0(directory, names(anppList[[i]]),".tif"),
+              NAflag = 0,
+              datatype = "FLT4S",
+              overwrite = TRUE)
+}
+
+
+#----NEEC----#
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("ANEE-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          rasterList[[name]] <- raster
+        }
+      }
+    }
+  }
+}
+
+Resistance_RCP45_HSHV <- c(rasterList[[1]],rasterList[[2]],rasterList[[3]],rasterList[[4]],rasterList[[5]]) %>% app(., "mean")
+names(Resistance_RCP45_HSHV) <- "Resistance_RCP45_HSHV"
+Resistance_RCP45_HSLV <- c(rasterList[[6]],rasterList[[7]],rasterList[[8]],rasterList[[9]],rasterList[[10]]) %>% app(., "mean")
+names(Resistance_RCP45_HSLV) <- "Resistance_RCP45_HSLV"
+Resistance_RCP45_LSHV <- c(rasterList[[11]],rasterList[[12]],rasterList[[13]],rasterList[[14]],rasterList[[15]]) %>% app(., "mean")
+names(Resistance_RCP45_LSHV) <- "Resistance_RCP45_LSHV"
+Resistance_RCP45_LSLV <- c(rasterList[[16]],rasterList[[17]],rasterList[[18]],rasterList[[19]],rasterList[[20]]) %>% app(., "mean")
+names(Resistance_RCP45_LSLV) <- "Resistance_RCP45_LSLV"
+Resistance_RCP85_HSHV <- c(rasterList[[21]],rasterList[[22]],rasterList[[23]],rasterList[[24]],rasterList[[25]]) %>% app(., "mean")
+names(Resistance_RCP85_HSHV) <- "Resistance_RCP85_HSHV"
+Resistance_RCP85_HSLV <- c(rasterList[[26]],rasterList[[27]],rasterList[[28]],rasterList[[29]],rasterList[[30]]) %>% app(., "mean")
+names(Resistance_RCP85_HSLV) <- "Resistance_RCP85_HSLV"
+Resistance_RCP85_LSHV <- c(rasterList[[31]],rasterList[[32]],rasterList[[33]],rasterList[[34]],rasterList[[35]]) %>% app(., "mean")
+names(Resistance_RCP85_LSHV) <- "Resistance_RCP85_LSHV"
+Resistance_RCP85_LSLV <- c(rasterList[[36]],rasterList[[37]],rasterList[[38]],rasterList[[39]],rasterList[[40]]) %>% app(., "mean")
+names(Resistance_RCP85_LSLV) <- "Resistance_RCP85_LSLV"
+Resilience_RCP45_HSHV <- c(rasterList[[41]],rasterList[[42]],rasterList[[43]],rasterList[[44]],rasterList[[45]]) %>% app(., "mean")
+names(Resilience_RCP45_HSHV) <- "Resilience_RCP45_HSHV"
+Resilience_RCP45_HSLV <- c(rasterList[[46]],rasterList[[47]],rasterList[[48]],rasterList[[49]],rasterList[[50]]) %>% app(., "mean")
+names(Resilience_RCP45_HSLV) <- "Resilience_RCP45_HSLV"
+Resilience_RCP45_LSHV <- c(rasterList[[51]],rasterList[[52]],rasterList[[53]],rasterList[[54]],rasterList[[55]]) %>% app(., "mean")
+names(Resilience_RCP45_LSHV) <- "Resilience_RCP45_LSHV"
+Resilience_RCP45_LSLV <- c(rasterList[[56]],rasterList[[57]],rasterList[[58]],rasterList[[59]],rasterList[[60]]) %>% app(., "mean")
+names(Resilience_RCP45_LSLV) <- "Resilience_RCP45_LSLV"
+Resilience_RCP85_HSHV <- c(rasterList[[61]],rasterList[[62]],rasterList[[63]],rasterList[[64]],rasterList[[65]]) %>% app(., "mean")
+names(Resilience_RCP85_HSHV) <- "Resilience_RCP85_HSHV"
+Resilience_RCP85_HSLV <- c(rasterList[[66]],rasterList[[67]],rasterList[[68]],rasterList[[69]],rasterList[[70]]) %>% app(., "mean")
+names(Resilience_RCP85_HSLV) <- "Resilience_RCP85_HSLV"
+Resilience_RCP85_LSHV <- c(rasterList[[71]],rasterList[[72]],rasterList[[73]],rasterList[[74]],rasterList[[75]]) %>% app(., "mean")
+names(Resilience_RCP85_LSHV) <- "Resilience_RCP85_LSHV"
+Resilience_RCP85_LSLV <- c(rasterList[[76]],rasterList[[77]],rasterList[[78]],rasterList[[79]],rasterList[[80]]) %>% app(., "mean")
+names(Resilience_RCP85_LSLV) <- "Resilience_RCP85_LSLV"
+Transition_RCP45_HSHV <- c(rasterList[[81]],rasterList[[82]],rasterList[[83]],rasterList[[84]],rasterList[[85]]) %>% app(., "mean")
+names(Transition_RCP45_HSHV) <- "Transition_RCP45_HSHV"
+Transition_RCP45_HSLV <- c(rasterList[[86]],rasterList[[87]],rasterList[[88]],rasterList[[89]],rasterList[[90]]) %>% app(., "mean")
+names(Transition_RCP45_HSLV) <- "Transition_RCP45_HSLV"
+Transition_RCP45_LSHV <- c(rasterList[[91]],rasterList[[92]],rasterList[[93]],rasterList[[94]],rasterList[[95]]) %>% app(., "mean")
+names(Transition_RCP45_LSHV) <- "Transition_RCP45_LSHV"
+Transition_RCP45_LSLV <- c(rasterList[[96]],rasterList[[97]],rasterList[[98]],rasterList[[99]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP45_LSLV) <- "Transition_RCP45_LSLV"
+Transition_RCP85_HSHV <- c(rasterList[[101]],rasterList[[102]],rasterList[[103]],rasterList[[104]],rasterList[[105]]) %>% app(., "mean")
+names(Transition_RCP85_HSHV) <- "Transition_RCP85_HSHV"
+Transition_RCP85_HSLV <- c(rasterList[[106]],rasterList[[107]],rasterList[[108]],rasterList[[109]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP85_HSLV) <- "Transition_RCP85_HSLV"
+Transition_RCP85_LSHV <- c(rasterList[[111]],rasterList[[112]],rasterList[[113]],rasterList[[114]],rasterList[[115]]) %>% app(., "mean")
+names(Transition_RCP85_LSHV) <- "Transition_RCP85_LSHV"
+Transition_RCP85_LSLV <- c(rasterList[[116]],rasterList[[117]],rasterList[[118]],rasterList[[119]],rasterList[[120]]) %>% app(., "mean")
+names(Transition_RCP85_LSLV) <- "Transition_RCP85_LSLV"
+
+aneeList <- list(Resistance_RCP45_HSHV,Resilience_RCP45_HSHV,Transition_RCP45_HSHV,Resistance_RCP85_HSHV,Resilience_RCP85_HSHV,Transition_RCP85_HSHV,Resistance_RCP45_HSLV,Resilience_RCP45_HSLV,Transition_RCP45_HSLV,Resistance_RCP85_HSLV,Resilience_RCP85_HSLV,Transition_RCP85_HSLV,Resistance_RCP45_LSHV,Resilience_RCP45_LSHV,Transition_RCP45_LSHV,Resistance_RCP85_LSHV,Resilience_RCP85_LSHV,Transition_RCP85_LSHV,Resistance_RCP45_LSLV,Resilience_RCP45_LSLV,Transition_RCP45_LSLV,Resistance_RCP85_LSLV,Resilience_RCP85_LSLV,Transition_RCP85_LSLV)
+
+directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/NEEC/"
+for (i in seq_along(aneeList)) {
+  writeRaster(aneeList[[i]],
+              filename = paste0(directory, names(aneeList[[i]]),".tif"),
+              NAflag = 0,
+              datatype = "FLT4S",
+              overwrite = TRUE)
+}
+
+#----ANNUAL WATER BUDGET----#
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("Annual-water-budget-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          rasterList[[name]] <- raster
+        }
+      }
+    }
+  }
+}
+
+Resistance_RCP45_HSHV <- c(rasterList[[1]],rasterList[[2]],rasterList[[3]],rasterList[[4]],rasterList[[5]]) %>% app(., "mean")
+names(Resistance_RCP45_HSHV) <- "Resistance_RCP45_HSHV"
+Resistance_RCP45_HSLV <- c(rasterList[[6]],rasterList[[7]],rasterList[[8]],rasterList[[9]],rasterList[[10]]) %>% app(., "mean")
+names(Resistance_RCP45_HSLV) <- "Resistance_RCP45_HSLV"
+Resistance_RCP45_LSHV <- c(rasterList[[11]],rasterList[[12]],rasterList[[13]],rasterList[[14]],rasterList[[15]]) %>% app(., "mean")
+names(Resistance_RCP45_LSHV) <- "Resistance_RCP45_LSHV"
+Resistance_RCP45_LSLV <- c(rasterList[[16]],rasterList[[17]],rasterList[[18]],rasterList[[19]],rasterList[[20]]) %>% app(., "mean")
+names(Resistance_RCP45_LSLV) <- "Resistance_RCP45_LSLV"
+Resistance_RCP85_HSHV <- c(rasterList[[21]],rasterList[[22]],rasterList[[23]],rasterList[[24]],rasterList[[25]]) %>% app(., "mean")
+names(Resistance_RCP85_HSHV) <- "Resistance_RCP85_HSHV"
+Resistance_RCP85_HSLV <- c(rasterList[[26]],rasterList[[27]],rasterList[[28]],rasterList[[29]],rasterList[[30]]) %>% app(., "mean")
+names(Resistance_RCP85_HSLV) <- "Resistance_RCP85_HSLV"
+Resistance_RCP85_LSHV <- c(rasterList[[31]],rasterList[[32]],rasterList[[33]],rasterList[[34]],rasterList[[35]]) %>% app(., "mean")
+names(Resistance_RCP85_LSHV) <- "Resistance_RCP85_LSHV"
+Resistance_RCP85_LSLV <- c(rasterList[[36]],rasterList[[37]],rasterList[[38]],rasterList[[39]],rasterList[[40]]) %>% app(., "mean")
+names(Resistance_RCP85_LSLV) <- "Resistance_RCP85_LSLV"
+Resilience_RCP45_HSHV <- c(rasterList[[41]],rasterList[[42]],rasterList[[43]],rasterList[[44]],rasterList[[45]]) %>% app(., "mean")
+names(Resilience_RCP45_HSHV) <- "Resilience_RCP45_HSHV"
+Resilience_RCP45_HSLV <- c(rasterList[[46]],rasterList[[47]],rasterList[[48]],rasterList[[49]],rasterList[[50]]) %>% app(., "mean")
+names(Resilience_RCP45_HSLV) <- "Resilience_RCP45_HSLV"
+Resilience_RCP45_LSHV <- c(rasterList[[51]],rasterList[[52]],rasterList[[53]],rasterList[[54]],rasterList[[55]]) %>% app(., "mean")
+names(Resilience_RCP45_LSHV) <- "Resilience_RCP45_LSHV"
+Resilience_RCP45_LSLV <- c(rasterList[[56]],rasterList[[57]],rasterList[[58]],rasterList[[59]],rasterList[[60]]) %>% app(., "mean")
+names(Resilience_RCP45_LSLV) <- "Resilience_RCP45_LSLV"
+Resilience_RCP85_HSHV <- c(rasterList[[61]],rasterList[[62]],rasterList[[63]],rasterList[[64]],rasterList[[65]]) %>% app(., "mean")
+names(Resilience_RCP85_HSHV) <- "Resilience_RCP85_HSHV"
+Resilience_RCP85_HSLV <- c(rasterList[[66]],rasterList[[67]],rasterList[[68]],rasterList[[69]],rasterList[[70]]) %>% app(., "mean")
+names(Resilience_RCP85_HSLV) <- "Resilience_RCP85_HSLV"
+Resilience_RCP85_LSHV <- c(rasterList[[71]],rasterList[[72]],rasterList[[73]],rasterList[[74]],rasterList[[75]]) %>% app(., "mean")
+names(Resilience_RCP85_LSHV) <- "Resilience_RCP85_LSHV"
+Resilience_RCP85_LSLV <- c(rasterList[[76]],rasterList[[77]],rasterList[[78]],rasterList[[79]],rasterList[[80]]) %>% app(., "mean")
+names(Resilience_RCP85_LSLV) <- "Resilience_RCP85_LSLV"
+Transition_RCP45_HSHV <- c(rasterList[[81]],rasterList[[82]],rasterList[[83]],rasterList[[84]],rasterList[[85]]) %>% app(., "mean")
+names(Transition_RCP45_HSHV) <- "Transition_RCP45_HSHV"
+Transition_RCP45_HSLV <- c(rasterList[[86]],rasterList[[87]],rasterList[[88]],rasterList[[89]],rasterList[[90]]) %>% app(., "mean")
+names(Transition_RCP45_HSLV) <- "Transition_RCP45_HSLV"
+Transition_RCP45_LSHV <- c(rasterList[[91]],rasterList[[92]],rasterList[[93]],rasterList[[94]],rasterList[[95]]) %>% app(., "mean")
+names(Transition_RCP45_LSHV) <- "Transition_RCP45_LSHV"
+Transition_RCP45_LSLV <- c(rasterList[[96]],rasterList[[97]],rasterList[[98]],rasterList[[99]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP45_LSLV) <- "Transition_RCP45_LSLV"
+Transition_RCP85_HSHV <- c(rasterList[[101]],rasterList[[102]],rasterList[[103]],rasterList[[104]],rasterList[[105]]) %>% app(., "mean")
+names(Transition_RCP85_HSHV) <- "Transition_RCP85_HSHV"
+Transition_RCP85_HSLV <- c(rasterList[[106]],rasterList[[107]],rasterList[[108]],rasterList[[109]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP85_HSLV) <- "Transition_RCP85_HSLV"
+Transition_RCP85_LSHV <- c(rasterList[[111]],rasterList[[112]],rasterList[[113]],rasterList[[114]],rasterList[[115]]) %>% app(., "mean")
+names(Transition_RCP85_LSHV) <- "Transition_RCP85_LSHV"
+Transition_RCP85_LSLV <- c(rasterList[[116]],rasterList[[117]],rasterList[[118]],rasterList[[119]],rasterList[[120]]) %>% app(., "mean")
+names(Transition_RCP85_LSLV) <- "Transition_RCP85_LSLV"
+
+awbList <- list(Resistance_RCP45_HSHV,Resilience_RCP45_HSHV,Transition_RCP45_HSHV,Resistance_RCP85_HSHV,Resilience_RCP85_HSHV,Transition_RCP85_HSHV,Resistance_RCP45_HSLV,Resilience_RCP45_HSLV,Transition_RCP45_HSLV,Resistance_RCP85_HSLV,Resilience_RCP85_HSLV,Transition_RCP85_HSLV,Resistance_RCP45_LSHV,Resilience_RCP45_LSHV,Transition_RCP45_LSHV,Resistance_RCP85_LSHV,Resilience_RCP85_LSHV,Transition_RCP85_LSHV,Resistance_RCP45_LSLV,Resilience_RCP45_LSLV,Transition_RCP45_LSLV,Resistance_RCP85_LSLV,Resilience_RCP85_LSLV,Transition_RCP85_LSLV)
+
+directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/AWB/"
+for (i in seq_along(awbList)) {
+  writeRaster(awbList[[i]],
+              filename = paste0(directory, names(awbList[[i]]),".tif"),
+              NAflag = 0,
+              datatype = "FLT4S",
+              overwrite = TRUE)
+}
+
+#----SOMTC----#
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("SOMTC-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          rasterList[[name]] <- raster
+        }
+      }
+    }
+  }
+}
+
+Resistance_RCP45_HSHV <- c(rasterList[[1]],rasterList[[2]],rasterList[[3]],rasterList[[4]],rasterList[[5]]) %>% app(., "mean")
+names(Resistance_RCP45_HSHV) <- "Resistance_RCP45_HSHV"
+Resistance_RCP45_HSLV <- c(rasterList[[6]],rasterList[[7]],rasterList[[8]],rasterList[[9]],rasterList[[10]]) %>% app(., "mean")
+names(Resistance_RCP45_HSLV) <- "Resistance_RCP45_HSLV"
+Resistance_RCP45_LSHV <- c(rasterList[[11]],rasterList[[12]],rasterList[[13]],rasterList[[14]],rasterList[[15]]) %>% app(., "mean")
+names(Resistance_RCP45_LSHV) <- "Resistance_RCP45_LSHV"
+Resistance_RCP45_LSLV <- c(rasterList[[16]],rasterList[[17]],rasterList[[18]],rasterList[[19]],rasterList[[20]]) %>% app(., "mean")
+names(Resistance_RCP45_LSLV) <- "Resistance_RCP45_LSLV"
+Resistance_RCP85_HSHV <- c(rasterList[[21]],rasterList[[22]],rasterList[[23]],rasterList[[24]],rasterList[[25]]) %>% app(., "mean")
+names(Resistance_RCP85_HSHV) <- "Resistance_RCP85_HSHV"
+Resistance_RCP85_HSLV <- c(rasterList[[26]],rasterList[[27]],rasterList[[28]],rasterList[[29]],rasterList[[30]]) %>% app(., "mean")
+names(Resistance_RCP85_HSLV) <- "Resistance_RCP85_HSLV"
+Resistance_RCP85_LSHV <- c(rasterList[[31]],rasterList[[32]],rasterList[[33]],rasterList[[34]],rasterList[[35]]) %>% app(., "mean")
+names(Resistance_RCP85_LSHV) <- "Resistance_RCP85_LSHV"
+Resistance_RCP85_LSLV <- c(rasterList[[36]],rasterList[[37]],rasterList[[38]],rasterList[[39]],rasterList[[40]]) %>% app(., "mean")
+names(Resistance_RCP85_LSLV) <- "Resistance_RCP85_LSLV"
+Resilience_RCP45_HSHV <- c(rasterList[[41]],rasterList[[42]],rasterList[[43]],rasterList[[44]],rasterList[[45]]) %>% app(., "mean")
+names(Resilience_RCP45_HSHV) <- "Resilience_RCP45_HSHV"
+Resilience_RCP45_HSLV <- c(rasterList[[46]],rasterList[[47]],rasterList[[48]],rasterList[[49]],rasterList[[50]]) %>% app(., "mean")
+names(Resilience_RCP45_HSLV) <- "Resilience_RCP45_HSLV"
+Resilience_RCP45_LSHV <- c(rasterList[[51]],rasterList[[52]],rasterList[[53]],rasterList[[54]],rasterList[[55]]) %>% app(., "mean")
+names(Resilience_RCP45_LSHV) <- "Resilience_RCP45_LSHV"
+Resilience_RCP45_LSLV <- c(rasterList[[56]],rasterList[[57]],rasterList[[58]],rasterList[[59]],rasterList[[60]]) %>% app(., "mean")
+names(Resilience_RCP45_LSLV) <- "Resilience_RCP45_LSLV"
+Resilience_RCP85_HSHV <- c(rasterList[[61]],rasterList[[62]],rasterList[[63]],rasterList[[64]],rasterList[[65]]) %>% app(., "mean")
+names(Resilience_RCP85_HSHV) <- "Resilience_RCP85_HSHV"
+Resilience_RCP85_HSLV <- c(rasterList[[66]],rasterList[[67]],rasterList[[68]],rasterList[[69]],rasterList[[70]]) %>% app(., "mean")
+names(Resilience_RCP85_HSLV) <- "Resilience_RCP85_HSLV"
+Resilience_RCP85_LSHV <- c(rasterList[[71]],rasterList[[72]],rasterList[[73]],rasterList[[74]],rasterList[[75]]) %>% app(., "mean")
+names(Resilience_RCP85_LSHV) <- "Resilience_RCP85_LSHV"
+Resilience_RCP85_LSLV <- c(rasterList[[76]],rasterList[[77]],rasterList[[78]],rasterList[[79]],rasterList[[80]]) %>% app(., "mean")
+names(Resilience_RCP85_LSLV) <- "Resilience_RCP85_LSLV"
+Transition_RCP45_HSHV <- c(rasterList[[81]],rasterList[[82]],rasterList[[83]],rasterList[[84]],rasterList[[85]]) %>% app(., "mean")
+names(Transition_RCP45_HSHV) <- "Transition_RCP45_HSHV"
+Transition_RCP45_HSLV <- c(rasterList[[86]],rasterList[[87]],rasterList[[88]],rasterList[[89]],rasterList[[90]]) %>% app(., "mean")
+names(Transition_RCP45_HSLV) <- "Transition_RCP45_HSLV"
+Transition_RCP45_LSHV <- c(rasterList[[91]],rasterList[[92]],rasterList[[93]],rasterList[[94]],rasterList[[95]]) %>% app(., "mean")
+names(Transition_RCP45_LSHV) <- "Transition_RCP45_LSHV"
+Transition_RCP45_LSLV <- c(rasterList[[96]],rasterList[[97]],rasterList[[98]],rasterList[[99]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP45_LSLV) <- "Transition_RCP45_LSLV"
+Transition_RCP85_HSHV <- c(rasterList[[101]],rasterList[[102]],rasterList[[103]],rasterList[[104]],rasterList[[105]]) %>% app(., "mean")
+names(Transition_RCP85_HSHV) <- "Transition_RCP85_HSHV"
+Transition_RCP85_HSLV <- c(rasterList[[106]],rasterList[[107]],rasterList[[108]],rasterList[[109]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP85_HSLV) <- "Transition_RCP85_HSLV"
+Transition_RCP85_LSHV <- c(rasterList[[111]],rasterList[[112]],rasterList[[113]],rasterList[[114]],rasterList[[115]]) %>% app(., "mean")
+names(Transition_RCP85_LSHV) <- "Transition_RCP85_LSHV"
+Transition_RCP85_LSLV <- c(rasterList[[116]],rasterList[[117]],rasterList[[118]],rasterList[[119]],rasterList[[120]]) %>% app(., "mean")
+names(Transition_RCP85_LSLV) <- "Transition_RCP85_LSLV"
+
+somtcList <- list(Resistance_RCP45_HSHV,Resilience_RCP45_HSHV,Transition_RCP45_HSHV,Resistance_RCP85_HSHV,Resilience_RCP85_HSHV,Transition_RCP85_HSHV,Resistance_RCP45_HSLV,Resilience_RCP45_HSLV,Transition_RCP45_HSLV,Resistance_RCP85_HSLV,Resilience_RCP85_HSLV,Transition_RCP85_HSLV,Resistance_RCP45_LSHV,Resilience_RCP45_LSHV,Transition_RCP45_LSHV,Resistance_RCP85_LSHV,Resilience_RCP85_LSHV,Transition_RCP85_LSHV,Resistance_RCP45_LSLV,Resilience_RCP45_LSLV,Transition_RCP45_LSLV,Resistance_RCP85_LSLV,Resilience_RCP85_LSLV,Transition_RCP85_LSLV)
+
+directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/SOMTC/"
+for (i in seq_along(somtcList)) {
+  writeRaster(somtcList[[i]],
+              filename = paste0(directory, names(somtcList[[i]]),".tif"),
+              NAflag = 0,
+              datatype = "FLT4S",
+              overwrite = TRUE)
+}
+
+#----ABOVEGROUND BIOMASS----#
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("output/biomass/bio-TotalBiomass-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          rasterList[[name]] <- raster
+        }
+      }
+    }
+  }
+}
+
+Resistance_RCP45_HSHV <- c(rasterList[[1]],rasterList[[2]],rasterList[[3]],rasterList[[4]],rasterList[[5]]) %>% app(., "mean")
+names(Resistance_RCP45_HSHV) <- "Resistance_RCP45_HSHV"
+Resistance_RCP45_HSLV <- c(rasterList[[6]],rasterList[[7]],rasterList[[8]],rasterList[[9]],rasterList[[10]]) %>% app(., "mean")
+names(Resistance_RCP45_HSLV) <- "Resistance_RCP45_HSLV"
+Resistance_RCP45_LSHV <- c(rasterList[[11]],rasterList[[12]],rasterList[[13]],rasterList[[14]],rasterList[[15]]) %>% app(., "mean")
+names(Resistance_RCP45_LSHV) <- "Resistance_RCP45_LSHV"
+Resistance_RCP45_LSLV <- c(rasterList[[16]],rasterList[[17]],rasterList[[18]],rasterList[[19]],rasterList[[20]]) %>% app(., "mean")
+names(Resistance_RCP45_LSLV) <- "Resistance_RCP45_LSLV"
+Resistance_RCP85_HSHV <- c(rasterList[[21]],rasterList[[22]],rasterList[[23]],rasterList[[24]],rasterList[[25]]) %>% app(., "mean")
+names(Resistance_RCP85_HSHV) <- "Resistance_RCP85_HSHV"
+Resistance_RCP85_HSLV <- c(rasterList[[26]],rasterList[[27]],rasterList[[28]],rasterList[[29]],rasterList[[30]]) %>% app(., "mean")
+names(Resistance_RCP85_HSLV) <- "Resistance_RCP85_HSLV"
+Resistance_RCP85_LSHV <- c(rasterList[[31]],rasterList[[32]],rasterList[[33]],rasterList[[34]],rasterList[[35]]) %>% app(., "mean")
+names(Resistance_RCP85_LSHV) <- "Resistance_RCP85_LSHV"
+Resistance_RCP85_LSLV <- c(rasterList[[36]],rasterList[[37]],rasterList[[38]],rasterList[[39]],rasterList[[40]]) %>% app(., "mean")
+names(Resistance_RCP85_LSLV) <- "Resistance_RCP85_LSLV"
+Resilience_RCP45_HSHV <- c(rasterList[[41]],rasterList[[42]],rasterList[[43]],rasterList[[44]],rasterList[[45]]) %>% app(., "mean")
+names(Resilience_RCP45_HSHV) <- "Resilience_RCP45_HSHV"
+Resilience_RCP45_HSLV <- c(rasterList[[46]],rasterList[[47]],rasterList[[48]],rasterList[[49]],rasterList[[50]]) %>% app(., "mean")
+names(Resilience_RCP45_HSLV) <- "Resilience_RCP45_HSLV"
+Resilience_RCP45_LSHV <- c(rasterList[[51]],rasterList[[52]],rasterList[[53]],rasterList[[54]],rasterList[[55]]) %>% app(., "mean")
+names(Resilience_RCP45_LSHV) <- "Resilience_RCP45_LSHV"
+Resilience_RCP45_LSLV <- c(rasterList[[56]],rasterList[[57]],rasterList[[58]],rasterList[[59]],rasterList[[60]]) %>% app(., "mean")
+names(Resilience_RCP45_LSLV) <- "Resilience_RCP45_LSLV"
+Resilience_RCP85_HSHV <- c(rasterList[[61]],rasterList[[62]],rasterList[[63]],rasterList[[64]],rasterList[[65]]) %>% app(., "mean")
+names(Resilience_RCP85_HSHV) <- "Resilience_RCP85_HSHV"
+Resilience_RCP85_HSLV <- c(rasterList[[66]],rasterList[[67]],rasterList[[68]],rasterList[[69]],rasterList[[70]]) %>% app(., "mean")
+names(Resilience_RCP85_HSLV) <- "Resilience_RCP85_HSLV"
+Resilience_RCP85_LSHV <- c(rasterList[[71]],rasterList[[72]],rasterList[[73]],rasterList[[74]],rasterList[[75]]) %>% app(., "mean")
+names(Resilience_RCP85_LSHV) <- "Resilience_RCP85_LSHV"
+Resilience_RCP85_LSLV <- c(rasterList[[76]],rasterList[[77]],rasterList[[78]],rasterList[[79]],rasterList[[80]]) %>% app(., "mean")
+names(Resilience_RCP85_LSLV) <- "Resilience_RCP85_LSLV"
+Transition_RCP45_HSHV <- c(rasterList[[81]],rasterList[[82]],rasterList[[83]],rasterList[[84]],rasterList[[85]]) %>% app(., "mean")
+names(Transition_RCP45_HSHV) <- "Transition_RCP45_HSHV"
+Transition_RCP45_HSLV <- c(rasterList[[86]],rasterList[[87]],rasterList[[88]],rasterList[[89]],rasterList[[90]]) %>% app(., "mean")
+names(Transition_RCP45_HSLV) <- "Transition_RCP45_HSLV"
+Transition_RCP45_LSHV <- c(rasterList[[91]],rasterList[[92]],rasterList[[93]],rasterList[[94]],rasterList[[95]]) %>% app(., "mean")
+names(Transition_RCP45_LSHV) <- "Transition_RCP45_LSHV"
+Transition_RCP45_LSLV <- c(rasterList[[96]],rasterList[[97]],rasterList[[98]],rasterList[[99]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP45_LSLV) <- "Transition_RCP45_LSLV"
+Transition_RCP85_HSHV <- c(rasterList[[101]],rasterList[[102]],rasterList[[103]],rasterList[[104]],rasterList[[105]]) %>% app(., "mean")
+names(Transition_RCP85_HSHV) <- "Transition_RCP85_HSHV"
+Transition_RCP85_HSLV <- c(rasterList[[106]],rasterList[[107]],rasterList[[108]],rasterList[[109]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP85_HSLV) <- "Transition_RCP85_HSLV"
+Transition_RCP85_LSHV <- c(rasterList[[111]],rasterList[[112]],rasterList[[113]],rasterList[[114]],rasterList[[115]]) %>% app(., "mean")
+names(Transition_RCP85_LSHV) <- "Transition_RCP85_LSHV"
+Transition_RCP85_LSLV <- c(rasterList[[116]],rasterList[[117]],rasterList[[118]],rasterList[[119]],rasterList[[120]]) %>% app(., "mean")
+names(Transition_RCP85_LSLV) <- "Transition_RCP85_LSLV"
+
+agbList <- list(Resistance_RCP45_HSHV,Resilience_RCP45_HSHV,Transition_RCP45_HSHV,Resistance_RCP85_HSHV,Resilience_RCP85_HSHV,Transition_RCP85_HSHV,Resistance_RCP45_HSLV,Resilience_RCP45_HSLV,Transition_RCP45_HSLV,Resistance_RCP85_HSLV,Resilience_RCP85_HSLV,Transition_RCP85_HSLV,Resistance_RCP45_LSHV,Resilience_RCP45_LSHV,Transition_RCP45_LSHV,Resistance_RCP85_LSHV,Resilience_RCP85_LSHV,Transition_RCP85_LSHV,Resistance_RCP45_LSLV,Resilience_RCP45_LSLV,Transition_RCP45_LSLV,Resistance_RCP85_LSLV,Resilience_RCP85_LSLV,Transition_RCP85_LSLV)
+
+directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/AGB/"
+for (i in seq_along(agbList)) {
+  writeRaster(agbList[[i]],
+              filename = paste0(directory, names(agbList[[i]]),".tif"),
+              NAflag = 0,
+              datatype = "FLT4S",
+              overwrite = TRUE)
+}
+
+#----BIODIVERSITY----#
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          for (spp in species){
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("output/biomass/bio-", spp, "-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, timestep, spp, run, sep = "_")
+          rasterList[[name]] <- raster
+          }
+        }
+      }
+    }
+  }
+}
+
+combo_list <- expand.grid(scenario = scenarios, rcp = rcps, climate = climates) 
+diversityList <- list()
+for (i in 1:nrow(combo_list)) {
+  scenario <- combo_list$scenario[i]
+  rcp <- combo_list$rcp[i]
+  climate <- combo_list$climate[i]
+  species_rasters <- list()
+  for (spp in species) {
+    spp_rasters <- list()
+    for (run in runs) {
+      for (timestep in timesteps) {
+        img_file <- file.path(mainDir, scenario, rcp, climate, run, 
+                              paste0("output/biomass/bio-", spp, "-", timestep, ".img"))
+        r <- rast(img_file)
+        crs(r) <- "epsg:26917"
+        r <- flip(r)
+        ext(r) <- ext(templateRaster)
+        spp_rasters <- append(spp_rasters, r)
+      }
+    }
+    species_rasters[[spp]] <- app(spp_rasters, "mean")
+  }
+  species_stack <- rast(species_rasters)
+  df <- as.data.frame(species_stack, xy = TRUE)
+  df <- df %>% 
+    mutate(rowSums = rowSums(select(., -x, -y))) %>%
+    filter(rowSums > 0)
+  shannon_vals <- diversity(df[,-c(1,2, ncol(df))], "shannon")
+  df$H <- shannon_vals
+  diversity_rast <- as_spatraster(df[, c("x", "y", "H")], crs = "epsg:26917") %>% 
+                    project(., templateRaster)
+  map_name <- paste(scenario, rcp, climate, sep = "_")
+  # names(diversity_rast) <- map_name
+  diversityList[[map_name]] <- diversity_rast
+}
+
+directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/DIVERSITY/"
+for (i in names(diversityMaps)) {
+  writeRaster(diversityMaps[[i]],
+              filename = paste0(directory, i,".tif"),
+              NAflag = 0,
+              datatype = "FLT4S",
+              overwrite = TRUE)
+}
+
+#----TOTAL HARVEST----#
+rasterList <- list()
+for (scenario in scenarios) {
+  for (rcp in rcps) {
+    for (climate in climates) {
+      for (run in runs) {
+        for (timestep in timesteps) {
+          img_file <- file.path(mainDir, scenario, rcp, climate, run, paste0("Harvest/biomass-removed-", timestep, ".img"))
+          raster <- rast(img_file)
+          crs(raster) <- "epsg:26917"
+          raster <- flip(raster)
+          ext(raster) <- ext(templateRaster)
+          name <- paste(scenario, rcp, climate, run, timestep, sep = "_")
+          rasterList[[name]] <- raster
+        }
+      }
+    }
+  }
+}
+
+Resistance_RCP45_HSHV <- c(rasterList[[1]],rasterList[[2]],rasterList[[3]],rasterList[[4]],rasterList[[5]]) %>% app(., "mean")
+names(Resistance_RCP45_HSHV) <- "Resistance_RCP45_HSHV"
+Resistance_RCP45_HSLV <- c(rasterList[[6]],rasterList[[7]],rasterList[[8]],rasterList[[9]],rasterList[[10]]) %>% app(., "mean")
+names(Resistance_RCP45_HSLV) <- "Resistance_RCP45_HSLV"
+Resistance_RCP45_LSHV <- c(rasterList[[11]],rasterList[[12]],rasterList[[13]],rasterList[[14]],rasterList[[15]]) %>% app(., "mean")
+names(Resistance_RCP45_LSHV) <- "Resistance_RCP45_LSHV"
+Resistance_RCP45_LSLV <- c(rasterList[[16]],rasterList[[17]],rasterList[[18]],rasterList[[19]],rasterList[[20]]) %>% app(., "mean")
+names(Resistance_RCP45_LSLV) <- "Resistance_RCP45_LSLV"
+Resistance_RCP85_HSHV <- c(rasterList[[21]],rasterList[[22]],rasterList[[23]],rasterList[[24]],rasterList[[25]]) %>% app(., "mean")
+names(Resistance_RCP85_HSHV) <- "Resistance_RCP85_HSHV"
+Resistance_RCP85_HSLV <- c(rasterList[[26]],rasterList[[27]],rasterList[[28]],rasterList[[29]],rasterList[[30]]) %>% app(., "mean")
+names(Resistance_RCP85_HSLV) <- "Resistance_RCP85_HSLV"
+Resistance_RCP85_LSHV <- c(rasterList[[31]],rasterList[[32]],rasterList[[33]],rasterList[[34]],rasterList[[35]]) %>% app(., "mean")
+names(Resistance_RCP85_LSHV) <- "Resistance_RCP85_LSHV"
+Resistance_RCP85_LSLV <- c(rasterList[[36]],rasterList[[37]],rasterList[[38]],rasterList[[39]],rasterList[[40]]) %>% app(., "mean")
+names(Resistance_RCP85_LSLV) <- "Resistance_RCP85_LSLV"
+Resilience_RCP45_HSHV <- c(rasterList[[41]],rasterList[[42]],rasterList[[43]],rasterList[[44]],rasterList[[45]]) %>% app(., "mean")
+names(Resilience_RCP45_HSHV) <- "Resilience_RCP45_HSHV"
+Resilience_RCP45_HSLV <- c(rasterList[[46]],rasterList[[47]],rasterList[[48]],rasterList[[49]],rasterList[[50]]) %>% app(., "mean")
+names(Resilience_RCP45_HSLV) <- "Resilience_RCP45_HSLV"
+Resilience_RCP45_LSHV <- c(rasterList[[51]],rasterList[[52]],rasterList[[53]],rasterList[[54]],rasterList[[55]]) %>% app(., "mean")
+names(Resilience_RCP45_LSHV) <- "Resilience_RCP45_LSHV"
+Resilience_RCP45_LSLV <- c(rasterList[[56]],rasterList[[57]],rasterList[[58]],rasterList[[59]],rasterList[[60]]) %>% app(., "mean")
+names(Resilience_RCP45_LSLV) <- "Resilience_RCP45_LSLV"
+Resilience_RCP85_HSHV <- c(rasterList[[61]],rasterList[[62]],rasterList[[63]],rasterList[[64]],rasterList[[65]]) %>% app(., "mean")
+names(Resilience_RCP85_HSHV) <- "Resilience_RCP85_HSHV"
+Resilience_RCP85_HSLV <- c(rasterList[[66]],rasterList[[67]],rasterList[[68]],rasterList[[69]],rasterList[[70]]) %>% app(., "mean")
+names(Resilience_RCP85_HSLV) <- "Resilience_RCP85_HSLV"
+Resilience_RCP85_LSHV <- c(rasterList[[71]],rasterList[[72]],rasterList[[73]],rasterList[[74]],rasterList[[75]]) %>% app(., "mean")
+names(Resilience_RCP85_LSHV) <- "Resilience_RCP85_LSHV"
+Resilience_RCP85_LSLV <- c(rasterList[[76]],rasterList[[77]],rasterList[[78]],rasterList[[79]],rasterList[[80]]) %>% app(., "mean")
+names(Resilience_RCP85_LSLV) <- "Resilience_RCP85_LSLV"
+Transition_RCP45_HSHV <- c(rasterList[[81]],rasterList[[82]],rasterList[[83]],rasterList[[84]],rasterList[[85]]) %>% app(., "mean")
+names(Transition_RCP45_HSHV) <- "Transition_RCP45_HSHV"
+Transition_RCP45_HSLV <- c(rasterList[[86]],rasterList[[87]],rasterList[[88]],rasterList[[89]],rasterList[[90]]) %>% app(., "mean")
+names(Transition_RCP45_HSLV) <- "Transition_RCP45_HSLV"
+Transition_RCP45_LSHV <- c(rasterList[[91]],rasterList[[92]],rasterList[[93]],rasterList[[94]],rasterList[[95]]) %>% app(., "mean")
+names(Transition_RCP45_LSHV) <- "Transition_RCP45_LSHV"
+Transition_RCP45_LSLV <- c(rasterList[[96]],rasterList[[97]],rasterList[[98]],rasterList[[99]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP45_LSLV) <- "Transition_RCP45_LSLV"
+Transition_RCP85_HSHV <- c(rasterList[[101]],rasterList[[102]],rasterList[[103]],rasterList[[104]],rasterList[[105]]) %>% app(., "mean")
+names(Transition_RCP85_HSHV) <- "Transition_RCP85_HSHV"
+Transition_RCP85_HSLV <- c(rasterList[[106]],rasterList[[107]],rasterList[[108]],rasterList[[109]],rasterList[[100]]) %>% app(., "mean")
+names(Transition_RCP85_HSLV) <- "Transition_RCP85_HSLV"
+Transition_RCP85_LSHV <- c(rasterList[[111]],rasterList[[112]],rasterList[[113]],rasterList[[114]],rasterList[[115]]) %>% app(., "mean")
+names(Transition_RCP85_LSHV) <- "Transition_RCP85_LSHV"
+Transition_RCP85_LSLV <- c(rasterList[[116]],rasterList[[117]],rasterList[[118]],rasterList[[119]],rasterList[[120]]) %>% app(., "mean")
+names(Transition_RCP85_LSLV) <- "Transition_RCP85_LSLV"
+
+harvestList <- list(Resistance_RCP45_HSHV,Resilience_RCP45_HSHV,Transition_RCP45_HSHV,Resistance_RCP85_HSHV,Resilience_RCP85_HSHV,Transition_RCP85_HSHV,Resistance_RCP45_HSLV,Resilience_RCP45_HSLV,Transition_RCP45_HSLV,Resistance_RCP85_HSLV,Resilience_RCP85_HSLV,Transition_RCP85_HSLV,Resistance_RCP45_LSHV,Resilience_RCP45_LSHV,Transition_RCP45_LSHV,Resistance_RCP85_LSHV,Resilience_RCP85_LSHV,Transition_RCP85_LSHV,Resistance_RCP45_LSLV,Resilience_RCP45_LSLV,Transition_RCP45_LSLV,Resistance_RCP85_LSLV,Resilience_RCP85_LSLV,Transition_RCP85_LSLV)
+
+directory <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/HARVEST/"
+for (i in seq_along(harvestList)) {
+  writeRaster(harvestList[[i]],
+              filename = paste0(directory, names(harvestList[[i]]),".tif"),
+              NAflag = 0,
+              datatype = "FLT4S",
+              overwrite = TRUE)
+}
+
+
+
+test <- c(carbonList[[1]], anppList[[1]], aneeList[[1]], awbList[[1]], somtcList[[1]], agbList[[1]], diversityMaps[[1]], harvestList[[1]])
+test <- app(test, function(x){ifelse(x == 0, NA, x)})
+
+
+testList <- list()
+for (i in seq_along(test)) {
+  r <- test[[i]]
+  r_min <- global(r, "min", na.rm = TRUE)[[1]]
+  r_max <- global(r, "max", na.rm = TRUE)[[1]]
+  raster <- (r - r_min) / (r_max - r_min)
+  testList[[i]] <- raster
+}
+
+testList <- lapply(test, function(r) {
+  # Get the minimum and maximum of the current raster
+  r_min <- global(r, "min", na.rm = TRUE)[[1]]
+  r_max <- global(r, "max", na.rm = TRUE)[[1]]
+
+  # Rescale the raster to the range [0, 1]
+  (r - r_min) / (r_max - r_min)  # This will return NaN for constant rasters
+})
+
+
+
+######## TESTING EUCLID WITH SMALLER LANDSCAPE #######
+x <- lapply(testList, function(x){crop(x, ext(6.4e5,645500, 4e6, 4.005e6))})
+
+x <- c(x[[1]],x[[2]],x[[3]],x[[4]],x[[5]]) %>% as.data.frame(xy = TRUE)
+coords <- x[,c(1,2)]
+
+x <- dist(x[,-c(1,2)], method = "euclidean")
+
+
+x <- as.data.frame(as.matrix(x))
+
+x <- x %>% rowSums() %>% as.data.frame() %>% cbind(coords,.)
+
+plot(as_spatraster(x, crs = "epsg:26917"))
+
+
+#####
+x <- lapply(testList, function(x){crop(x, ext(6.4e5,645500, 4e6, 4.005e6))})
+x <- c(x[[1]],x[[2]],x[[3]],x[[4]],x[[5]],x[[6]],x[[7]],x[[8]]) %>% as.data.frame(xy = TRUE)
+names(x) <- c("x","y","Carbon","ANPP","NEEC","AWB","SOMTC","AGB","H","Harvest")
+x <- x %>% mutate(across(-c(1,2), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
+coords <- x[,c(1,2)]
+
+x <- ecodist::distance(x[,-c(1,2)], method = "bray-curtis")
+
+x <- as.data.frame(as.matrix(x))
+
+x <- x %>% rowSums() %>% as.data.frame() %>% cbind(coords,.)
+
+x <- as_spatraster(x, crs = "epsg:26917")
+
+plot(x)
+
+louis <- focal(x, w = matrix(1,5,5), fun = mean, na.rm = TRUE)
+plot(louis)
+
+plot(x)
+plot(mask(louis, x))
+
+sort(c("Carbon","ANPP","NEEC","AWB","SOMTC","AGB","H","Harvest"))
+```
+
+
+
+```{r}
+mainDir <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/Rasters"
+colNames <- c("x","y","AGB","ANPP","AWB","Carbon","H","Harvest","NEEC","SOMTC")
+subfolders <- list.dirs(mainDir, recursive = FALSE)
+get_rasters_from_subfolder <- function(folder) {
+  rasters <- list.files(folder, pattern = "\\.tif$", full.names = TRUE)
+  raster_list <- lapply(rasters, rast)
+  names(raster_list) <- tools::file_path_sans_ext(basename(rasters))
+  return(raster_list)
+}
+all_subfolder_rasters <- lapply(subfolders, get_rasters_from_subfolder)
+all_raster_names <- unique(unlist(lapply(all_subfolder_rasters, names)))
+grouped_rasters <- lapply(all_raster_names, function(name) {
+  lapply(all_subfolder_rasters, function(subfolder) {
+    if (name %in% names(subfolder)) subfolder[[name]] else NULL
+  }) %>% compact()
+})
+names(grouped_rasters) <- all_raster_names
+normaliseRasters <- function(rasters){
+  lapply(rasters, function(r){
+    r <- app(r, function(x) ifelse(x == 0, NA, x))
+    r_min <- global(r, "min", na.rm = TRUE)[[1]]
+    r_max <- global(r, "max", na.rm = TRUE)[[1]]
+    (r - r_min) / (r_max - r_min)
+  })
+}
+
+# grouped_rasters <- lapply(grouped_rasters, function(x){
+#   lapply(x, function(i){
+#     crop(i, ext(6.4e5,645500, 4e6, 4.005e6))
+#   })
+# })
+
+normalized_groups <- lapply(grouped_rasters, normaliseRasters)
+stacked_rasters <- lapply(normalized_groups, function(x) {rast(x)})
+df_list <- lapply(stacked_rasters, function(raster_obj) {as.data.frame(raster_obj, xy = TRUE)})
+df_list <- lapply(df_list, function(x){
+  colnames(x) <- colNames
+  return(x)})
+
+# Fill in Harvest NAs for now, but might need to redo this bit!!
+df_list <- lapply(df_list, function(x){x %>% mutate(across(-c(x,y), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))})
+
+mapNames <- c("Resilience_RCP45_HSHV","Resilience_RCP45_HSLV","Resilience_RCP45_LSHV","Resilience_RCP45_LSLV","Resilience_RCP85_HSHV","Resilience_RCP85_HSLV","Resilience_RCP85_LSHV","Resilience_RCP85_LSLV","Resistance_RCP45_HSHV","Resistance_RCP45_HSLV","Resistance_RCP45_LSHV","Resistance_RCP45_LSLV","Resistance_RCP85_HSHV","Resistance_RCP85_HSLV","Resistance_RCP85_LSHV","Resistance_RCP85_LSLV","Transition_RCP45_HSHV","Transition_RCP45_HSLV","Transition_RCP45_LSHV","Transition_RCP45_LSLV","Transition_RCP85_HSHV","Transition_RCP85_HSLV","Transition_RCP85_LSHV","Transition_RCP85_LSLV")
+
+outputDir <- "C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/Data"
+finalMaps <- list()
+for (i in seq_along(df_list)) {
+  x <- df_list[[i]]
+  dist_mat <- ecodist::distance(x[,-c(1,2)], method = "bray-curtis")
+  dist_df <- as.data.frame(as.matrix(dist_mat))
+  dist_sum <- rowSums(dist_df, na.rm = TRUE)
+  coords <- x[,c("x","y")]
+  final_df <- cbind(coords, dist_sum)
+  dist_rast <- as_spatraster(final_df, crs = "epsg:26917")
+  final_map <- focal(dist_rast, w = matrix(1,5,5), fun = mean, na.rm = TRUE)
+  final_map <- mask(final_map, normalized_groups[[1]][[1]])
+  names(final_map) <- mapNames[i]
+  finalMaps[[i]] <- final_map
+  gc()
+  file_path <- file.path(outputDir, paste0(mapNames[i], ".tif"))
+  writeRaster(final_map, filename = file_path, overwrite = TRUE, NAflag = 0, datatype = "FLT4S")
+}
+
+colSums(is.na(x))
+
+plot(rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/Data/Transition_RCP85_HSHV.tif"))
+plot(rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/Data/Resilience_RCP85_HSHV.tif"))
+plot(rast("C:/Users/lagoodal/Desktop/Dissertation Stuff/Chapter 2/HPC_ES_MAPS/Data/Resistance_RCP85_HSHV.tif"))
+
+
+louis <- lapply(finalMaps, function(x){mask(x, normalized_groups[[1]][[1]])})
+plot(louis[[1]])
+
+as.data.frame(as.matrix(dist_mat))
+
+
+
+plot(stacked_rasters[[1]][[1]])
+
+
+writeRaster(stacked_rasters[[1]][[1]],
+            filename = "C:/Users/lagoodal/Desktop/TEST_RASTER.tif",
+            datatype = "FLT4S",
+            NAflag = 0,
+            overwrite = TRUE)
+```
+
+
+
+```{r}
+# plot(stacked_rasters[[1]][[1]])
+# 
+# tileSize <- c(71,71)
+# res(stacked_rasters[[1]][[1]])
+# bufferCells <- 5
+# outputFiles <- makeTiles(stacked_rasters[[1]],
+#                          y = tileSize,
+#                          filename = "C:/Users/lagoodal/Desktop/Raster Dump/tile.tif",
+#                          buffer = bufferCells,
+#                          overwrite = TRUE)
+# outputFiles <- lapply(outputFiles, function(x){rast(file.path(x))})
+# 
+# tileList <- lapply(outputFiles, function(tile){
+#   values <- terra::values(tile)
+#   return(as.vector(values))
+# })
+
+r <- rast("C:/Users/lagoodal/Desktop/Raster Dump/tile111.tif")
+coords <- r %>% as.data.frame(xy = TRUE, na.rm = FALSE) %>% select(x,y)
+valMatrix <- values(r)
+valMatrix <- valMatrix[,-6]
+# drop <- complete.cases(valMatrix)
+# valMatrix <- valMatrix[drop,]
+
+for (i in seq_len(ncol(valMatrix))) {
+  col_vals <- valMatrix[, i]
+  
+  # Calculate median ignoring NaN
+  col_median <- median(col_vals[!is.nan(col_vals)], na.rm = TRUE)
+  
+  # Replace NaN with column median
+  col_vals[is.nan(col_vals)] <- col_median
+  
+  # Assign back to the matrix
+  valMatrix[, i] <- col_vals
+}
+
+
+x <- vegdist(valMatrix, method = "bray")
+x <- as.data.frame(as.matrix(x))
+
+x <- cbind(coords, rowSums(x)) %>% rename("Sum" = "rowSums(x)")
+
+test <- as_spatraster(x, crs = "epsg:26917")
+plot(test)
+plot(mask(test, r[[1]]))
+
+
+r <- rast("C:/Users/lagoodal/Desktop/Raster Dump/tile140.tif")
+coords <- r %>% as.data.frame(xy = TRUE, na.rm = FALSE) %>% select(x,y)
+valMatrix <- values(r)
+valMatrix <- valMatrix[,-6]
+# drop <- complete.cases(valMatrix)
+# valMatrix <- valMatrix[drop,]
+
+for (i in seq_len(ncol(valMatrix))) {
+  col_vals <- valMatrix[, i]
+  
+  # Calculate median ignoring NaN
+  col_median <- median(col_vals[!is.nan(col_vals)], na.rm = TRUE)
+  
+  # Replace NaN with column median
+  col_vals[is.nan(col_vals)] <- col_median
+  
+  # Assign back to the matrix
+  valMatrix[, i] <- col_vals
+}
+
+
+x <- vegdist(valMatrix, method = "bray")
+x <- as.data.frame(as.matrix(x))
+
+x <- cbind(coords, rowSums(x)) %>% rename("Sum" = "rowSums(x)")
+
+test <- as_spatraster(x, crs = "epsg:26917")
+plot(test)
+plot(mask(test, r[[1]]))
+```
+################ OLD
+ext <- ext(stacked_rasters[[1]][[1]])
+
+x_seq <- seq(ext[1], ext[2], by = 4900)
+y_seq <- seq(ext[3], ext[4], by = 4900)
+grid_list <- list()
+i <- 1
+for (x in x_seq) {
+  for (y in y_seq) {
+    grid_list[[i]] <- ext(x, x + 5000, y, y + 5000) |> as.polygons()
+    i <- i + 1
+  } 
+}
+
+grid <- do.call(rbind, grid_list)
+crs(grid) <- "EPSG:26917"
+grid$grid_id <- seq_len(nrow(grid))
+
+
+r_xy <- as.data.frame(stacked_rasters[[1]], xy = TRUE, cells = TRUE)
+r_xy <- r_xy[-9]
+
+# Create points, add x/y as attributes
+points <- vect(r_xy, geom = c("x", "y"), crs = "EPSG:26917")
+points$cell <- r_xy$cell
+points$x <- r_xy$x      # ← add x attribute
+points$y <- r_xy$y      # ← add y attribute
+
+# Add grid ID
+grid$grid_id <- seq_len(nrow(grid))
+
+# Intersect: now attributes should come through
+join <- terra::intersect(points, grid)
+
+# Check what's there
+names(join) <- c("cell", colNames[c(3:7,9,10)], "x", "y", "grid_id")
+
+xy_by_grid <- as.data.frame(join)
+
+###### OLD
+x <- xy_by_grid %>% filter(grid_id %in% c(130))
+x <- x %>% mutate(across(-c(x, y), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
+
+# Now for each chunk I want to perform create a distance matrix
+
+louis <- vegdist(x[,-c(1,11)], method = "bray")
+louis <- as.data.frame(as.matrix(louis))
+
+
+# louis <- ecodist::distance(x[,-c(1,11)], method = "bray-curtis")
+# louis <- as.data.frame(as.matrix(louis))
+
+df <- cbind(x[,c(9,10)], louis)
+
+longDf <- df %>%
+  pivot_longer(cols = 3:ncol(df), names_to = "col_index", values_to = "value") %>%
+  mutate(col_index = as.integer(col_index))
+
+
+
+plot(as_spatraster(x[,c(9,10,3)], crs = "epsg:26917"))
+ggplot(longDf, aes(x = x, y = y, fill = value)) +
+  geom_tile() +
+  coord_fixed() +
+  scale_fill_viridis_c() +
+  theme_minimal()
+
+
+x_small <- xy_by_grid %>% filter(grid_id == 130)
+x_small <- x_small %>% drop_na()
+dist_mat <- ecodist::distance(x_small[,-c(1,11)], method = "bray-curtis")
+dist_mat <- as.data.frame(as.matrix(dist_mat))
+dist_mat <- cbind(x_small[,c(9,10)], rowSums(dist_mat))
+
+plot(as_spatraster(dist_mat, crs = "epsg:26917"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
